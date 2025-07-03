@@ -3,3 +3,4 @@ v1
 /venv
 test_codes*
 student_codes*
+*.pyc

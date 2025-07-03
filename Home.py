@@ -10,7 +10,8 @@ from utils.auth import (
     is_authenticated,
     validate_user_code,
     is_first_time_user,
-    handle_first_time_user
+    handle_first_time_user,
+    update_user_consent
 )
 from utils.logging import log_page_visit, log_user_action
 
@@ -35,7 +36,7 @@ def show_login_page():
     st.title("💬 Chat Application")
     st.markdown("---")
     
-    # Handle first-time user consent flow
+    # Handle consent flow for users who need to set consent
     if st.session_state.get("needs_consent", False):
         show_consent_form()
         return
@@ -68,19 +69,27 @@ def show_login_page():
                 st.success("Login successful!")
                 st.rerun()
             elif st.session_state.get("needs_consent", False):
-                # First-time user - will show consent form on rerun
+                # User needs consent - will show consent form on rerun
                 st.rerun()
             else:
                 st.error("Invalid access code. Please check your code and try again.")
 
 def show_consent_form():
-    """Show data consent form for first-time users"""
-    st.header("Welcome - First Time Setup")
+    """Show data consent form for users who need to set consent"""
+    st.header("Welcome - Data Consent Review Required")
     st.markdown("---")
     
     temp_code = st.session_state.get("temp_code", "")
     
-    st.info(f"Welcome! We see this is your first time using the code: **{temp_code}**")
+    # Check if this is a new user or existing user
+    from utils.database import get_user_data
+    user_data = get_user_data(temp_code)
+    is_new_user = user_data is None
+    
+    if is_new_user:
+        st.info(f"Welcome! We see this is your first time using the code: **{temp_code}**")
+    else:
+        st.info(f"Welcome back! We need you to reconsider your data consent preferences for code: **{temp_code}**")
     
     st.markdown("""
     ### Data Collection Notice
@@ -105,18 +114,35 @@ def show_consent_form():
         
         with col1:
             if st.form_submit_button("Continue", use_container_width=True):
-                if handle_first_time_user(temp_code, data_consent):
+                success = False
+                
+                if is_new_user:
+                    # Create new user
+                    success = handle_first_time_user(temp_code, data_consent)
+                else:
+                    # Update existing user's consent
+                    success = update_user_consent(temp_code, data_consent)
+                
+                if success:
                     st.session_state.authenticated = True
                     st.session_state.user_code = temp_code
                     st.session_state.needs_consent = False
                     if "temp_code" in st.session_state:
                         del st.session_state.temp_code
                     
-                    log_user_action(temp_code, "consent_given", {"consent": data_consent})
-                    st.success("Account created successfully!")
+                    action_type = "consent_given" if is_new_user else "consent_updated"
+                    log_user_action(temp_code, action_type, {"consent": data_consent})
+                    
+                    if is_new_user:
+                        st.success("Account created successfully!")
+                    else:
+                        st.success("Consent preferences updated successfully!")
                     st.rerun()
                 else:
-                    st.error("Error creating account. Please try again.")
+                    if is_new_user:
+                        st.error("Error creating account. Please try again.")
+                    else:
+                        st.error("Error updating consent preferences. Please try again.")
         
         with col2:
             if st.form_submit_button("Cancel", use_container_width=True):

@@ -74,11 +74,23 @@ def login_user(code: str) -> bool:
     """Login user and set session state"""
     code = code.upper().strip()
     
-    if is_first_time_user(code):
+    # Check if user exists
+    user_data = get_user_data(code)
+    
+    if user_data is None:
+        # New user - needs consent
         st.session_state.needs_consent = True
         st.session_state.temp_code = code
         return False
     
+    # User exists - check if consent is explicitly denied
+    if user_data.get("data_use_consent") is False:
+        # Existing user with denied consent - needs to reconsider
+        st.session_state.needs_consent = True
+        st.session_state.temp_code = code
+        return False
+    
+    # User exists and has consent set - proceed with login
     if authenticate_user(code):
         st.session_state.authenticated = True
         st.session_state.user_code = code
