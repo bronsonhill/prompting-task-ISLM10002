@@ -1,0 +1,115 @@
+"""
+Authentication utilities for the chat application MVP
+"""
+import streamlit as st
+from .database import get_user_data, create_user, update_last_login, set_data_consent, log_action
+from typing import Optional
+
+def validate_user_code(code: str) -> bool:
+    """Validate a 5-character user code"""
+    if not code or len(code) != 5:
+        return False
+    
+    # Check if code contains only alphanumeric characters
+    if not code.isalnum():
+        return False
+    
+    return True
+
+def authenticate_user(code: str) -> bool:
+    """Authenticate user and handle login"""
+    if not validate_user_code(code):
+        return False
+    
+    user_data = get_user_data(code)
+    
+    if user_data:
+        # Existing user - update last login
+        update_last_login(code)
+        log_action(code, "login", {"timestamp": user_data.get("last_login")})
+        return True
+    
+    return False
+
+def get_user_session_data(code: str) -> Optional[dict]:
+    """Get user data for session management"""
+    return get_user_data(code)
+
+def is_first_time_user(code: str) -> bool:
+    """Check if user exists in database"""
+    user_data = get_user_data(code)
+    return user_data is None
+
+def handle_first_time_user(code: str, data_consent: bool) -> bool:
+    """Handle first-time user registration"""
+    if create_user(code, data_consent):
+        log_action(code, "user_created", {"data_consent": data_consent})
+        return True
+    return False
+
+def update_user_consent(code: str, consent: bool) -> bool:
+    """Update user's data consent"""
+    if set_data_consent(code, consent):
+        log_action(code, "consent_updated", {"data_consent": consent})
+        return True
+    return False
+
+def has_consent_set(code: str) -> bool:
+    """Check if user has set data consent"""
+    user_data = get_user_data(code)
+    if user_data:
+        return user_data.get("data_use_consent") is not None
+    return False
+
+def initialize_session():
+    """Initialize session state variables"""
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+    if "user_code" not in st.session_state:
+        st.session_state.user_code = None
+    if "user_data" not in st.session_state:
+        st.session_state.user_data = None
+
+def login_user(code: str) -> bool:
+    """Login user and set session state"""
+    code = code.upper().strip()
+    
+    if is_first_time_user(code):
+        st.session_state.needs_consent = True
+        st.session_state.temp_code = code
+        return False
+    
+    if authenticate_user(code):
+        st.session_state.authenticated = True
+        st.session_state.user_code = code
+        st.session_state.user_data = get_user_session_data(code)
+        st.session_state.needs_consent = False
+        return True
+    
+    return False
+
+def logout_user():
+    """Logout user and clear session state"""
+    if st.session_state.get("user_code"):
+        log_action(st.session_state.user_code, "logout", {})
+    
+    st.session_state.authenticated = False
+    st.session_state.user_code = None
+    st.session_state.user_data = None
+    st.session_state.needs_consent = False
+    if "temp_code" in st.session_state:
+        del st.session_state.temp_code
+
+def require_authentication():
+    """Decorator-like function to require authentication"""
+    if not st.session_state.get("authenticated", False):
+        st.warning("Please log in to access this page.")
+        st.stop()
+
+def get_current_user_code() -> Optional[str]:
+    """Get the current authenticated user's code"""
+    return st.session_state.get("user_code")
+
+def is_authenticated() -> bool:
+    """Check if user is authenticated"""
+    return st.session_state.get("authenticated", False)
