@@ -15,7 +15,8 @@ v2/
 │   └── 3_Admin.py         # Admin panel (optional)
 ├── scripts/
 │   ├── create_test_codes.py    # Generate test user codes
-│   └── create_student_codes.py # Generate codes from CSV
+│   ├── create_student_codes.py # Generate codes from CSV
+│   └── manage_admin_codes.py   # Manage admin codes in database
 ├── utils/
 │   ├── database.py        # MongoDB operations
 │   ├── auth.py           # Authentication and session management
@@ -139,6 +140,20 @@ streamlit run main.py
 }
 ```
 
+#### `admin_codes`
+```json
+{
+  "_id": ObjectId,
+  "code": "ADMIN",          // 5-character admin code
+  "level": "super_admin",   // "admin" or "super_admin"
+  "added_by": "system",     // Who added this code
+  "created_at": ISODate,
+  "is_active": true,        // Soft delete flag
+  "removed_by": "user123",  // Who removed it (if inactive)
+  "removed_at": ISODate     // When it was removed (if inactive)
+}
+```
+
 ## 💬 Usage Guide
 
 ### For Users
@@ -151,20 +166,91 @@ streamlit run main.py
 
 ### For Administrators
 
-1. **Access Admin Panel**: Login with an admin code (defined in `pages/3_Admin.py`)
+1. **Access Admin Panel**: Login with an admin code (see Admin System below)
 2. **View Statistics**: Monitor system usage and user activity
 3. **Manage Users**: Search and view user information
 4. **Analytics**: Track conversation and prompt usage patterns
+5. **Admin Management**: Manage admin codes and system settings
+
+## 👑 Admin System
+
+### Admin Access Levels
+
+- **Regular Users**: Standard access to Chat and Prompts
+- **Administrators**: Access to admin panel with analytics
+- **Super Administrators**: Can manage admin codes and system settings
+
+### Database-Based Admin Management
+
+Admin codes are now stored in the database instead of being hardcoded. This provides:
+- **Flexibility**: Add/remove admin codes without code changes
+- **Security**: Admin codes are stored securely in the database
+- **Audit Trail**: Track who added/removed admin codes and when
+- **Soft Deletion**: Admin codes are deactivated rather than deleted
+
+### Default Admin Codes
+
+The following codes are automatically created when the app starts:
+- `ADMIN` - Super Administrator
+- `SUPER` - Super Administrator  
+- `TEST1` - Administrator
+- `ADMIN1` - Administrator
+- `ADMIN2` - Administrator
+
+### Managing Admin Codes
+
+#### Via Script (Recommended)
+```bash
+# Initialize default admin codes
+python scripts/manage_admin_codes.py --init
+
+# List all admin codes
+python scripts/manage_admin_codes.py --list
+
+# Add a new admin code
+python scripts/manage_admin_codes.py --add ABC12 --level admin
+python scripts/manage_admin_codes.py --add XYZ99 --level super_admin
+
+# Remove an admin code (cannot remove super admins)
+python scripts/manage_admin_codes.py --remove TEST1
+```
+
+#### Via Admin Interface
+- Super administrators can manage admin codes through the web interface
+- Navigate to Admin → Admin Management tab
+- Add new codes with specified admin levels
+- Remove existing admin codes (except super admins)
+
+### Admin Features
+
+- **System Statistics**: User counts, activity metrics, consent statistics
+- **User Management**: Search users, view profiles, activity tracking
+- **Conversation Analytics**: Usage patterns, message statistics
+- **Prompt Analytics**: Most used prompts, creation trends
+- **Admin Management**: Add/remove admin codes (Super Admins only)
+
+### Dynamic Admin Interface
+
+- Admin status is automatically detected on login
+- Admin users see an additional "Admin" navigation option
+- Admin badge (👑) appears next to username for admin users
+- Admin metrics are shown in user statistics
 
 ## 🔧 Configuration Options
 
 ### Admin Codes
 
-Edit `pages/3_Admin.py` to modify admin access:
+Admin codes are now managed through the database. Use the management script:
 
-```python
-ADMIN_CODES = {"ADMIN", "SUPER", "YOUR_ADMIN_CODE"}
+```bash
+# Initialize default codes
+python scripts/manage_admin_codes.py --init
+
+# Add new admin codes
+python scripts/manage_admin_codes.py --add YOUR_CODE --level admin
 ```
+
+Or use the Admin Management interface (Super Admins only) to add/remove admin codes dynamically.
 
 ### OpenAI Model Settings
 

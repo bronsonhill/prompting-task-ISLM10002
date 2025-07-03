@@ -69,9 +69,9 @@ def show_prompt_interface(user_code: str):
     
     # Show statistics if there are prompts
     prompts = get_user_prompts(user_code)
-    if prompts:
-        st.markdown("---")
-        show_prompt_stats(user_code)
+    # if prompts:
+        # st.markdown("---")
+        # show_prompt_stats(user_code)
 
 def create_new_prompt(user_code: str, content: str):
     """Create a new prompt"""

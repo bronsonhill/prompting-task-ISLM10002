@@ -256,45 +256,55 @@ def handle_user_message(user_input: str, user_code: str):
     # Log user message
     log_chat_message(user_code, st.session_state.current_prompt, "user", user_input)
     
-    # Get AI response
+    # Get AI response with streaming
     try:
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                # Prepare messages for OpenAI (exclude timestamp)
-                openai_messages = []
-                for msg in st.session_state.messages:
-                    openai_messages.append({
-                        "role": msg["role"],
-                        "content": msg["content"]
-                    })
-                
-                # Call OpenAI API
-                client = st.session_state.openai_client
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=openai_messages,
-                    max_tokens=1000,
-                    temperature=0.7
-                )
-                
-                assistant_response = response.choices[0].message.content
-                st.write(assistant_response)
-                
-                # Add assistant message
-                assistant_message = {
-                    "role": "assistant",
-                    "content": assistant_response,
-                    "timestamp": datetime.utcnow()
-                }
-                
-                st.session_state.messages.append(assistant_message)
-                
-                # Log assistant message
-                log_chat_message(user_code, st.session_state.current_prompt, "assistant", assistant_response)
-                
-                # Update conversation in database
-                update_conversation(st.session_state.current_conversation, st.session_state.messages)
-                
+            # Prepare messages for OpenAI (exclude timestamp)
+            openai_messages = []
+            for msg in st.session_state.messages:
+                openai_messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
+            
+            # Call OpenAI API with streaming
+            client = st.session_state.openai_client
+            stream = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=openai_messages,
+                max_tokens=1000,
+                temperature=0.7,
+                stream=True  # Enable streaming
+            )
+            
+            # Stream the response using st.write_stream()
+            def stream_response():
+                full_response = ""
+                for chunk in stream:
+                    if chunk.choices[0].delta.content is not None:
+                        content = chunk.choices[0].delta.content
+                        full_response += content
+                        yield content
+                return full_response
+            
+            # Use st.write_stream to display the streaming response
+            assistant_response = st.write_stream(stream_response)
+            
+            # Add assistant message
+            assistant_message = {
+                "role": "assistant",
+                "content": assistant_response,
+                "timestamp": datetime.utcnow()
+            }
+            
+            st.session_state.messages.append(assistant_message)
+            
+            # Log assistant message
+            log_chat_message(user_code, st.session_state.current_prompt, "assistant", assistant_response)
+            
+            # Update conversation in database
+            update_conversation(st.session_state.current_conversation, st.session_state.messages)
+            
     except Exception as e:
         st.error(f"Error getting AI response: {str(e)}")
         log_error(user_code, "openai_error", str(e), {"prompt_id": st.session_state.current_prompt})

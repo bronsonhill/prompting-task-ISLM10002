@@ -2,7 +2,10 @@
 Authentication utilities for the chat application MVP
 """
 import streamlit as st
-from .database import get_user_data, create_user, update_last_login, set_data_consent, log_action
+from .database import (
+    get_user_data, create_user, update_last_login, set_data_consent, log_action,
+    is_admin_code, get_admin_level, is_super_admin, get_admin_codes, add_admin_code, remove_admin_code
+)
 from typing import Optional
 
 def validate_user_code(code: str) -> bool:
@@ -15,6 +18,32 @@ def validate_user_code(code: str) -> bool:
         return False
     
     return True
+
+def is_admin_user(code: str) -> bool:
+    """Check if user code has admin privileges"""
+    return is_admin_code(code)
+
+def get_admin_codes_list() -> list:
+    """Get the list of admin codes from database"""
+    return get_admin_codes()
+
+def add_admin_code_auth(code: str, level: str = "admin", added_by: str = "system") -> bool:
+    """Add a new admin code (for super admins)"""
+    if code and len(code) == 5 and code.isalnum():
+        return add_admin_code(code, level, added_by)
+    return False
+
+def remove_admin_code_auth(code: str, removed_by: str = "system") -> bool:
+    """Remove an admin code (for super admins)"""
+    return remove_admin_code(code, removed_by)
+
+def is_super_admin_user(code: str) -> bool:
+    """Check if user code has super admin privileges"""
+    return is_super_admin(code)
+
+def get_admin_level_user(code: str) -> Optional[str]:
+    """Get the admin level for a user code"""
+    return get_admin_level(code)
 
 def authenticate_user(code: str) -> bool:
     """Authenticate user and handle login"""
@@ -96,6 +125,7 @@ def login_user(code: str) -> bool:
         st.session_state.user_code = code
         st.session_state.user_data = get_user_session_data(code)
         st.session_state.needs_consent = False
+        update_session_admin_status()  # Set admin status
         return True
     
     return False
@@ -109,6 +139,7 @@ def logout_user():
     st.session_state.user_code = None
     st.session_state.user_data = None
     st.session_state.needs_consent = False
+    st.session_state.is_admin = False
     if "temp_code" in st.session_state:
         del st.session_state.temp_code
 
@@ -125,3 +156,18 @@ def get_current_user_code() -> Optional[str]:
 def is_authenticated() -> bool:
     """Check if user is authenticated"""
     return st.session_state.get("authenticated", False)
+
+def get_current_user_admin_status() -> bool:
+    """Get the current user's admin status from session state"""
+    user_code = st.session_state.get("user_code")
+    if user_code:
+        return is_admin_user(user_code)
+    return False
+
+def update_session_admin_status():
+    """Update admin status in session state"""
+    user_code = st.session_state.get("user_code")
+    if user_code:
+        st.session_state.is_admin = is_admin_user(user_code)
+    else:
+        st.session_state.is_admin = False

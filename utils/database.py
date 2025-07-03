@@ -290,3 +290,142 @@ def id_to_display_number(id_string: str) -> int:
         return int(id_string)
     except ValueError:
         return 0
+
+# Admin code management functions
+def add_admin_code(code: str, level: str = "admin", added_by: str = "system") -> bool:
+    """Add an admin code to the database"""
+    try:
+        db = get_database()
+        admin_codes_collection = db.admin_codes
+        
+        # Check if admin code already exists
+        if admin_codes_collection.find_one({"code": code.upper()}):
+            return False
+        
+        admin_data = {
+            "code": code.upper(),
+            "level": level,  # "admin" or "super_admin"
+            "added_by": added_by,
+            "created_at": datetime.utcnow(),
+            "is_active": True
+        }
+        
+        result = admin_codes_collection.insert_one(admin_data)
+        return result.inserted_id is not None
+        
+    except Exception as e:
+        st.error(f"Error adding admin code: {str(e)}")
+        return False
+
+def remove_admin_code(code: str, removed_by: str = "system") -> bool:
+    """Remove an admin code from the database (soft delete)"""
+    try:
+        db = get_database()
+        admin_codes_collection = db.admin_codes
+        
+        # Soft delete by setting is_active to False
+        result = admin_codes_collection.update_one(
+            {"code": code.upper()},
+            {
+                "$set": {
+                    "is_active": False,
+                    "removed_by": removed_by,
+                    "removed_at": datetime.utcnow()
+                }
+            }
+        )
+        return result.modified_count > 0
+        
+    except Exception as e:
+        st.error(f"Error removing admin code: {str(e)}")
+        return False
+
+def get_admin_codes(include_inactive: bool = False) -> List[Dict]:
+    """Get all admin codes from the database"""
+    try:
+        db = get_database()
+        admin_codes_collection = db.admin_codes
+        
+        query = {}
+        if not include_inactive:
+            query["is_active"] = True
+        
+        admin_codes = list(admin_codes_collection.find(query).sort("created_at", -1))
+        return admin_codes
+        
+    except Exception as e:
+        st.error(f"Error getting admin codes: {str(e)}")
+        return []
+
+def is_admin_code(code: str) -> bool:
+    """Check if a code is an active admin code"""
+    try:
+        db = get_database()
+        admin_codes_collection = db.admin_codes
+        
+        admin_data = admin_codes_collection.find_one({
+            "code": code.upper(),
+            "is_active": True
+        })
+        
+        return admin_data is not None
+        
+    except Exception as e:
+        st.error(f"Error checking admin code: {str(e)}")
+        return False
+
+def get_admin_level(code: str) -> Optional[str]:
+    """Get the admin level for a given code"""
+    try:
+        db = get_database()
+        admin_codes_collection = db.admin_codes
+        
+        admin_data = admin_codes_collection.find_one({
+            "code": code.upper(),
+            "is_active": True
+        })
+        
+        return admin_data.get("level") if admin_data else None
+        
+    except Exception as e:
+        st.error(f"Error getting admin level: {str(e)}")
+        return None
+
+def is_super_admin(code: str) -> bool:
+    """Check if a code is a super admin"""
+    return get_admin_level(code) == "super_admin"
+
+def initialize_default_admin_codes():
+    """Initialize default admin codes if they don't exist"""
+    try:
+        db = get_database()
+        admin_codes_collection = db.admin_codes
+        
+        # Check if admin codes collection exists and has any active codes
+        existing_codes = admin_codes_collection.count_documents({"is_active": True})
+        
+        if existing_codes == 0:
+            # Add default admin codes
+            default_codes = [
+                {"code": "ADMIN", "level": "super_admin"},
+                {"code": "SUPER", "level": "super_admin"},
+                {"code": "TEST1", "level": "admin"},
+                {"code": "ADMIN1", "level": "admin"},
+                {"code": "ADMIN2", "level": "admin"}
+            ]
+            
+            for admin_data in default_codes:
+                add_admin_code(
+                    code=admin_data["code"],
+                    level=admin_data["level"],
+                    added_by="system_initialization"
+                )
+            
+            print("Default admin codes initialized successfully")
+            return True
+        
+        return False
+        
+    except Exception as e:
+        st.error(f"Error initializing default admin codes: {str(e)}")
+        return False

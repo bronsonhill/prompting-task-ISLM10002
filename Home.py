@@ -11,7 +11,9 @@ from utils.auth import (
     validate_user_code,
     is_first_time_user,
     handle_first_time_user,
-    update_user_consent
+    update_user_consent,
+    is_admin_user,
+    get_current_user_admin_status
 )
 from utils.logging import log_page_visit, log_user_action
 
@@ -24,6 +26,13 @@ def main():
     
     # Initialize session
     initialize_session()
+    
+    # Initialize admin codes if needed
+    try:
+        from utils.database import initialize_default_admin_codes
+        initialize_default_admin_codes()
+    except Exception as e:
+        st.error(f"Error initializing admin codes: {str(e)}")
     
     # If user is already authenticated, show main navigation
     if is_authenticated():
@@ -130,6 +139,10 @@ def show_consent_form():
                     if "temp_code" in st.session_state:
                         del st.session_state.temp_code
                     
+                    # Update admin status in session
+                    from utils.auth import update_session_admin_status
+                    update_session_admin_status()
+                    
                     action_type = "consent_given" if is_new_user else "consent_updated"
                     log_user_action(temp_code, action_type, {"consent": data_consent})
                     
@@ -163,7 +176,10 @@ def show_main_interface():
         st.title("💬 Chat Application")
     
     with col2:
-        st.markdown(f"**User:** {user_code}")
+        # Check if user is admin and show status
+        is_admin = get_current_user_admin_status()
+        admin_badge = "👑 **Admin**" if is_admin else ""
+        st.markdown(f"**User:** {user_code} {admin_badge}")
     
     with col3:
         if st.button("Logout", use_container_width=True):
@@ -175,19 +191,45 @@ def show_main_interface():
     # Navigation to main features
     st.header("Welcome! What would you like to do?")
     
-    col1, col2 = st.columns(2)
+    # Check if user is admin
+    is_admin = get_current_user_admin_status()
     
-    with col1:
-        st.subheader("💬 Chat")
-        st.markdown("Start conversations using your prompts")
-        if st.button("Go to Chat", use_container_width=True, key="nav_chat"):
-            st.switch_page("pages/1_Chat.py")
-    
-    with col2:
-        st.subheader("📝 Prompts")
-        st.markdown("Create and manage your conversation prompts")
-        if st.button("Go to Prompts", use_container_width=True, key="nav_prompts"):
-            st.switch_page("pages/2_Prompt.py")
+    if is_admin:
+        # Admin layout with 3 columns
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.subheader("💬 Chat")
+            st.markdown("Start conversations using your prompts")
+            if st.button("Go to Chat", use_container_width=True, key="nav_chat"):
+                st.switch_page("pages/1_Chat.py")
+        
+        with col2:
+            st.subheader("📝 Prompts")
+            st.markdown("Create and manage your conversation prompts")
+            if st.button("Go to Prompts", use_container_width=True, key="nav_prompts"):
+                st.switch_page("pages/2_Prompt.py")
+        
+        with col3:
+            st.subheader("⚙️ Admin")
+            st.markdown("System administration and analytics")
+            if st.button("Go to Admin", use_container_width=True, key="nav_admin"):
+                st.switch_page("pages/3_Admin.py")
+    else:
+        # Regular user layout with 2 columns
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("💬 Chat")
+            st.markdown("Start conversations using your prompts")
+            if st.button("Go to Chat", use_container_width=True, key="nav_chat"):
+                st.switch_page("pages/1_Chat.py")
+        
+        with col2:
+            st.subheader("📝 Prompts")
+            st.markdown("Create and manage your conversation prompts")
+            if st.button("Go to Prompts", use_container_width=True, key="nav_prompts"):
+                st.switch_page("pages/2_Prompt.py")
     
     # Quick stats
     st.markdown("---")
@@ -205,17 +247,36 @@ def show_user_stats():
         
         st.subheader("Your Activity")
         
-        col1, col2, col3 = st.columns(3)
+        # Check if user is admin
+        is_admin = get_current_user_admin_status()
         
-        with col1:
-            st.metric("Total Prompts", len(prompts))
-        
-        with col2:
-            st.metric("Total Conversations", len(conversations))
-        
-        with col3:
-            total_messages = sum(len(conv.get("messages", [])) for conv in conversations)
-            st.metric("Total Messages", total_messages)
+        if is_admin:
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Total Prompts", len(prompts))
+            
+            with col2:
+                st.metric("Total Conversations", len(conversations))
+            
+            with col3:
+                total_messages = sum(len(conv.get("messages", [])) for conv in conversations)
+                st.metric("Total Messages", total_messages)
+            
+            with col4:
+                st.metric("Admin Status", "👑 Active")
+        else:
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Total Prompts", len(prompts))
+            
+            with col2:
+                st.metric("Total Conversations", len(conversations))
+            
+            with col3:
+                total_messages = sum(len(conv.get("messages", [])) for conv in conversations)
+                st.metric("Total Messages", total_messages)
         
         # Recent activity
         if conversations:

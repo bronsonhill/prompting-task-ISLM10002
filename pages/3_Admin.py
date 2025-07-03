@@ -4,12 +4,9 @@ Simple admin interface for viewing system statistics
 """
 import streamlit as st
 from datetime import datetime, timedelta
-from utils.auth import require_authentication, get_current_user_code
+from utils.auth import require_authentication, get_current_user_code, is_admin_user, get_admin_codes_list, add_admin_code_auth, remove_admin_code_auth, is_super_admin_user, get_admin_level_user
 from utils.database import get_database, id_to_display_number
 from utils.logging import log_page_visit
-
-# Define admin codes (you can expand this to use a proper admin system)
-ADMIN_CODES = {"ADMIN", "SUPER", "TEST1"}  # Add your admin codes here
 
 def main():
     st.set_page_config(
@@ -27,8 +24,9 @@ def main():
         return
     
     # Check if user is admin
-    if user_code not in ADMIN_CODES:
+    if not is_admin_user(user_code):
         st.error("🔒 Access denied. Admin privileges required.")
+        st.info("If you believe you should have admin access, please contact the system administrator.")
         return
     
     log_page_visit(user_code, "admin")
@@ -37,6 +35,12 @@ def main():
     col1, col2 = st.columns([4, 1])
     with col1:
         st.title("⚙️ Admin Dashboard")
+        # Show admin level
+        admin_level = get_admin_level_user(user_code)
+        if admin_level == "super_admin":
+            st.caption("👑 Super Administrator")
+        else:
+            st.caption("🔧 Administrator")
     with col2:
         if st.button("← Back to Home"):
             st.switch_page("Home.py")
@@ -49,7 +53,7 @@ def main():
 def show_admin_interface():
     """Show admin interface"""
     # Tabs for different admin sections
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Statistics", "👥 Users", "💬 Conversations", "📝 Prompts"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Statistics", "👥 Users", "💬 Conversations", "📝 Prompts", "⚙️ Admin Management"])
     
     with tab1:
         show_system_statistics()
@@ -62,6 +66,9 @@ def show_admin_interface():
     
     with tab4:
         show_prompt_stats()
+    
+    with tab5:
+        show_admin_management()
 
 def show_system_statistics():
     """Show system-wide statistics"""
@@ -272,6 +279,106 @@ def show_prompt_stats():
                 
     except Exception as e:
         st.error(f"Error loading prompt stats: {str(e)}")
+
+def show_admin_management():
+    """Show admin management interface"""
+    st.header("⚙️ Admin Management")
+    
+    user_code = get_current_user_code()
+    admin_codes = get_admin_codes_list()
+    
+    # Show current admin status
+    st.subheader("Current Admin Status")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write(f"**Your Code:** {user_code}")
+        admin_level = get_admin_level_user(user_code)
+        admin_status = f"✅ {admin_level.replace('_', ' ').title()}" if admin_level else "❌ Not Admin"
+        st.write(f"**Admin Status:** {admin_status}")
+    
+    with col2:
+        active_codes = [code["code"] for code in admin_codes if code.get("is_active", True)]
+        st.write(f"**Total Admin Codes:** {len(active_codes)}")
+        st.write(f"**Admin Codes:** {', '.join(sorted(active_codes))}")
+    
+    st.markdown("---")
+    
+    # Admin code management (only for super admins)
+    if is_super_admin_user(user_code):
+        st.subheader("Admin Code Management")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Add New Admin Code**")
+            with st.form("add_admin_form"):
+                new_admin_code = st.text_input(
+                    "New Admin Code",
+                    max_chars=5,
+                    placeholder="Enter 5-character code",
+                    help="Enter a 5-character alphanumeric code"
+                ).upper().strip()
+                
+                admin_level = st.selectbox(
+                    "Admin Level",
+                    options=["admin", "super_admin"],
+                    help="Select the admin level for this code"
+                )
+                
+                if st.form_submit_button("Add Admin Code"):
+                    if new_admin_code and len(new_admin_code) == 5 and new_admin_code.isalnum():
+                        if add_admin_code_auth(new_admin_code, admin_level, user_code):
+                            st.success(f"✅ Admin code '{new_admin_code}' added successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to add admin code.")
+                    else:
+                        st.error("❌ Invalid code format. Must be 5 alphanumeric characters.")
+        
+        with col2:
+            st.write("**Remove Admin Code**")
+            with st.form("remove_admin_form"):
+                # Get codes that can be removed (not super admins)
+                removable_codes = []
+                for code_data in admin_codes:
+                    if code_data.get("is_active", True) and code_data.get("level") != "super_admin":
+                        removable_codes.append(code_data["code"])
+                
+                if removable_codes:
+                    code_to_remove = st.selectbox(
+                        "Select Admin Code to Remove",
+                        options=removable_codes,
+                        help="Select an admin code to remove (Super admins cannot be removed)"
+                    )
+                    
+                    if st.form_submit_button("Remove Admin Code"):
+                        if remove_admin_code_auth(code_to_remove, user_code):
+                            st.success(f"✅ Admin code '{code_to_remove}' removed successfully!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to remove admin code.")
+                else:
+                    st.info("No removable admin codes available.")
+    else:
+        st.info("🔒 Admin code management is restricted to super administrators.")
+    
+    st.markdown("---")
+    
+    # System information
+    st.subheader("System Information")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**Application Version:** 1.0.0")
+        st.write("**Database:** MongoDB")
+        st.write("**Framework:** Streamlit")
+    
+    with col2:
+        st.write("**Admin Access:** Dynamic")
+        st.write("**Authentication:** User Code Based")
+        st.write("**Data Collection:** Consent Based")
 
 if __name__ == "__main__":
     main()
