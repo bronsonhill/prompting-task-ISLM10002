@@ -57,7 +57,7 @@ def main():
         st.title("💬 Chat")
     with col2:
         if st.button("← Back to Home"):
-            st.switch_page("main.py")
+            st.switch_page("Home.py")
     
     st.markdown("---")
     
