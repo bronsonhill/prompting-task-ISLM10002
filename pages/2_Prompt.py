@@ -5,7 +5,7 @@ Handles prompt creation and management
 import streamlit as st
 from datetime import datetime
 from utils.auth import require_authentication, get_current_user_code
-from utils.database import save_prompt, get_user_prompts
+from utils.database import save_prompt, get_user_prompts, id_to_display_number
 from utils.logging import log_page_visit, log_prompt_creation
 
 def main():
@@ -79,7 +79,7 @@ def create_new_prompt(user_code: str, content: str):
         prompt_id = save_prompt(user_code, content)
         
         if prompt_id:
-            st.success(f"✅ Prompt created successfully! ID: {prompt_id}")
+            st.success(f"✅ Prompt created successfully! ID: {id_to_display_number(prompt_id)}")
             log_prompt_creation(user_code, prompt_id, content)
             
             # Clear the form by rerunning
@@ -120,7 +120,7 @@ def show_existing_prompts(user_code: str):
             col1, col2, col3 = st.columns([2, 3, 1])
             
             with col1:
-                st.subheader(f"🏷️ {prompt['prompt_id']}")
+                st.subheader(f"🏷️ {id_to_display_number(prompt['prompt_id'])}")
                 st.write(f"**Created:** {prompt['created_at'].strftime('%Y-%m-%d %H:%M')}")
                 
                 if prompt.get('updated_at') and prompt['updated_at'] != prompt['created_at']:
@@ -154,7 +154,7 @@ def show_existing_prompts(user_code: str):
 
 def show_copy_modal(prompt):
     """Show modal with copyable prompt content"""
-    st.subheader(f"Copy Content - {prompt['prompt_id']}")
+    st.subheader(f"Copy Content - {id_to_display_number(prompt['prompt_id'])}")
     
     st.text_area(
         "Prompt Content (Select all and copy)",
@@ -206,7 +206,7 @@ def show_prompt_stats(user_code: str):
         for prompt_id, usage_count in sorted_usage[:5]:  # Top 5
             prompt_data = next((p for p in prompts if p['prompt_id'] == prompt_id), None)
             if prompt_data:
-                st.write(f"**{prompt_id}** - Used {usage_count} time(s)")
+                st.write(f"**{id_to_display_number(prompt_id)}** - Used {usage_count} time(s)")
                 st.write(f"_{prompt_data['content'][:100]}{'...' if len(prompt_data['content']) > 100 else ''}_")
                 st.markdown("---")
 

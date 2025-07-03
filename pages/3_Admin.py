@@ -5,7 +5,7 @@ Simple admin interface for viewing system statistics
 import streamlit as st
 from datetime import datetime, timedelta
 from utils.auth import require_authentication, get_current_user_code
-from utils.database import get_database
+from utils.database import get_database, id_to_display_number
 from utils.logging import log_page_visit
 
 # Define admin codes (you can expand this to use a proper admin system)
@@ -219,8 +219,8 @@ def show_conversation_stats():
         recent_conversations = list(db.conversations.find({}).sort("updated_at", -1).limit(10))
         
         for conv in recent_conversations:
-            with st.expander(f"{conv['conversation_id']} - {conv['user_code']} - {conv['updated_at'].strftime('%Y-%m-%d %H:%M')}"):
-                st.write(f"**Prompt ID:** {conv['prompt_id']}")
+            with st.expander(f"{id_to_display_number(conv['conversation_id'])} - {conv['user_code']} - {conv['updated_at'].strftime('%Y-%m-%d %H:%M')}"):
+                st.write(f"**Prompt ID:** {id_to_display_number(conv['prompt_id'])}")
                 st.write(f"**Messages:** {len(conv.get('messages', []))}")
                 st.write(f"**Created:** {conv['created_at'].strftime('%Y-%m-%d %H:%M:%S')}")
                 st.write(f"**Last Updated:** {conv['updated_at'].strftime('%Y-%m-%d %H:%M:%S')}")
@@ -253,7 +253,7 @@ def show_prompt_stats():
                 # Get prompt details
                 prompt_data = db.prompts.find_one({"prompt_id": prompt_id})
                 if prompt_data:
-                    with st.expander(f"{prompt_id} - Used {usage_count} times"):
+                    with st.expander(f"{id_to_display_number(prompt_id)} - Used {usage_count} times"):
                         st.write(f"**Created by:** {prompt_data['user_code']}")
                         st.write(f"**Created:** {prompt_data['created_at'].strftime('%Y-%m-%d %H:%M')}")
                         st.write(f"**Content:** {prompt_data['content'][:200]}{'...' if len(prompt_data['content']) > 200 else ''}")
@@ -263,7 +263,7 @@ def show_prompt_stats():
         recent_prompts = list(db.prompts.find({}).sort("created_at", -1).limit(10))
         
         for prompt in recent_prompts:
-            with st.expander(f"{prompt['prompt_id']} - {prompt['user_code']} - {prompt['created_at'].strftime('%Y-%m-%d %H:%M')}"):
+            with st.expander(f"{id_to_display_number(prompt['prompt_id'])} - {prompt['user_code']} - {prompt['created_at'].strftime('%Y-%m-%d %H:%M')}"):
                 st.write(f"**Content:** {prompt['content']}")
                 
                 # Check usage

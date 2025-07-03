@@ -195,7 +195,7 @@ def show_main_interface():
 
 def show_user_stats():
     """Display user statistics"""
-    from utils.database import get_user_prompts, get_user_conversations
+    from utils.database import get_user_prompts, get_user_conversations, id_to_display_number
     
     user_code = st.session_state.user_code
     
@@ -221,8 +221,8 @@ def show_user_stats():
         if conversations:
             st.subheader("Recent Conversations")
             for conv in conversations[:3]:  # Show last 3 conversations
-                with st.expander(f"Conversation {conv['conversation_id']} - {conv['updated_at'].strftime('%Y-%m-%d %H:%M')}"):
-                    st.write(f"**Prompt:** {conv['prompt_id']}")
+                with st.expander(f"Conversation {id_to_display_number(conv['conversation_id'])} - {conv['updated_at'].strftime('%Y-%m-%d %H:%M')}"):
+                    st.write(f"**Prompt:** {id_to_display_number(conv['prompt_id'])}")
                     st.write(f"**Messages:** {len(conv.get('messages', []))}")
                     if st.button(f"Continue", key=f"continue_{conv['conversation_id']}"):
                         st.session_state.selected_conversation = conv['conversation_id']

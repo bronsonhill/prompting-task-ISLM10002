@@ -12,7 +12,8 @@ from utils.database import (
     get_user_conversations,
     get_conversation_by_id,
     save_conversation,
-    update_conversation
+    update_conversation,
+    id_to_display_number
 )
 from utils.logging import (
     log_page_visit, 
@@ -68,6 +69,8 @@ def main():
         st.session_state.current_prompt = None
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "show_prompt_selector" not in st.session_state:
+        st.session_state.show_prompt_selector = False
     
     # Check if we need to load a specific conversation (from main page)
     if "selected_conversation" in st.session_state:
@@ -79,7 +82,10 @@ def main():
         show_conversation_sidebar(user_code)
     
     # Main chat area
-    show_chat_interface(user_code)
+    if st.session_state.show_prompt_selector:
+        show_prompt_selection_modal(user_code)
+    else:
+        show_chat_interface(user_code)
 
 def show_conversation_sidebar(user_code: str):
     """Show conversation management in sidebar"""
@@ -87,18 +93,18 @@ def show_conversation_sidebar(user_code: str):
     
     # New chat button
     if st.button("📝 New Chat", use_container_width=True):
-        show_prompt_selection_modal(user_code)
+        st.session_state.show_prompt_selector = True
     
     st.markdown("---")
     
     # Current conversation info
     if st.session_state.current_conversation:
         st.subheader("Current Conversation")
-        st.write(f"**ID:** {st.session_state.current_conversation}")
+        st.write(f"**Conversation No.** {id_to_display_number(st.session_state.current_conversation)}")
         if st.session_state.current_prompt:
             prompt_data = get_prompt_by_id(st.session_state.current_prompt)
             if prompt_data:
-                st.write(f"**Prompt:** {st.session_state.current_prompt}")
+                st.write(f"**Prompt No.** {id_to_display_number(st.session_state.current_prompt)}")
                 with st.expander("View Prompt"):
                     st.write(prompt_data["content"])
         
@@ -113,7 +119,7 @@ def show_conversation_sidebar(user_code: str):
     
     if conversations:
         for conv in conversations:
-            conv_label = f"{conv['conversation_id']}"
+            conv_label = f"{id_to_display_number(conv['conversation_id'])}"
             if conv.get('messages'):
                 last_msg = conv['messages'][-1]['content'][:30] + "..." if len(conv['messages'][-1]['content']) > 30 else conv['messages'][-1]['content']
                 conv_label += f" - {last_msg}"
@@ -136,7 +142,7 @@ def show_prompt_selection_modal(user_code: str):
     # Create prompt options
     prompt_options = {}
     for prompt in prompts:
-        label = f"{prompt['prompt_id']} - {prompt['content'][:50]}{'...' if len(prompt['content']) > 50 else ''}"
+        label = f"{id_to_display_number(prompt['prompt_id'])} - {prompt['content'][:50]}{'...' if len(prompt['content']) > 50 else ''}"
         prompt_options[label] = prompt['prompt_id']
     
     selected_prompt_label = st.selectbox(
@@ -159,6 +165,7 @@ def show_prompt_selection_modal(user_code: str):
                     start_new_conversation(selected_prompt_id, user_code)
             with col2:
                 if st.button("Cancel", use_container_width=True):
+                    st.session_state.show_prompt_selector = False
                     st.rerun()
 
 def start_new_conversation(prompt_id: str, user_code: str):
@@ -168,7 +175,6 @@ def start_new_conversation(prompt_id: str, user_code: str):
     if not prompt_data:
         st.error("Error loading prompt data.")
         return
-    
     # Initialize conversation with system message
     messages = [{
         "role": "system",
@@ -187,7 +193,8 @@ def start_new_conversation(prompt_id: str, user_code: str):
         log_conversation_start(user_code, conversation_id, prompt_id)
         log_prompt_selection(user_code, prompt_id)
         
-        st.success(f"Started new conversation: {conversation_id}")
+        st.session_state.show_prompt_selector = False
+        st.success(f"Started new conversation: {id_to_display_number(conversation_id)}")
         st.rerun()
     else:
         st.error("Error creating conversation.")
@@ -210,6 +217,7 @@ def clear_current_chat():
     st.session_state.current_conversation = None
     st.session_state.current_prompt = None
     st.session_state.messages = []
+    st.session_state.show_prompt_selector = False
     st.rerun()
 
 def show_chat_interface(user_code: str):

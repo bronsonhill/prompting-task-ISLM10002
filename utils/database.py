@@ -272,3 +272,21 @@ def generate_unique_code(length: int = 5) -> str:
         code = ''.join(random.choices(characters, k=length))
         if not users_collection.find_one({"code": code}):
             return code
+
+def id_to_display_number(id_string: str) -> int:
+    """Convert a string ID (like 'P001' or 'C001') to an integer for display"""
+    if not id_string:
+        return 0
+    
+    # Remove prefix and convert to integer
+    if id_string.startswith('P') or id_string.startswith('C'):
+        try:
+            return int(id_string[1:])
+        except ValueError:
+            return 0
+    
+    # If it's already a number, try to convert directly
+    try:
+        return int(id_string)
+    except ValueError:
+        return 0
