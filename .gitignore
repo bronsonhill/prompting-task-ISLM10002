@@ -1,1 +1,5 @@
 v1
+.streamlit/secrets.toml
+/venv
+test_codes*
+student_codes*
