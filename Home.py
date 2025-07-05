@@ -220,17 +220,17 @@ def show_main_interface():
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("💬 Chat")
-            st.markdown("Start conversations using your prompts")
-            if st.button("Go to Chat", use_container_width=True, key="nav_chat"):
-                st.switch_page("pages/1_Chat.py")
-        
-        with col2:
             st.subheader("📝 Prompts")
             st.markdown("Create and manage your conversation prompts")
             if st.button("Go to Prompts", use_container_width=True, key="nav_prompts"):
                 st.switch_page("pages/2_Prompt.py")
     
+        with col2:
+            st.subheader("💬 Chat")
+            st.markdown("Start conversations using your prompts")
+            if st.button("Go to Chat", use_container_width=True, key="nav_chat"):
+                st.switch_page("pages/1_Chat.py")
+                
     # Quick stats
     st.markdown("---")
     show_user_stats()
