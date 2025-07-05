@@ -1,6 +1,6 @@
 """
 Main page for the Chat Application MVP
-Handles user login and data consent
+Handles user login, data consent, and dynamic navigation
 """
 import streamlit as st
 from utils.auth import (
@@ -13,7 +13,8 @@ from utils.auth import (
     handle_first_time_user,
     update_user_consent,
     is_admin_user,
-    get_current_user_admin_status
+    get_current_user_admin_status,
+    get_current_user_code
 )
 from utils.logging import log_page_visit, log_user_action
 
@@ -34,14 +35,14 @@ def main():
     except Exception as e:
         st.error(f"Error initializing admin codes: {str(e)}")
     
-    # If user is already authenticated, show main navigation
+    # Handle navigation based on authentication status
     if is_authenticated():
-        show_main_interface()
+        setup_authenticated_navigation()
     else:
-        show_login_page()
+        setup_unauthenticated_navigation()
 
-def show_login_page():
-    """Display login form for unauthenticated users"""
+def login_page():
+    """Login page function for st.navigation"""
     st.title("💬 Chat Application")
     st.markdown("---")
     
@@ -82,6 +83,80 @@ def show_login_page():
                 st.rerun()
             else:
                 st.error("Invalid access code. Please check your code and try again.")
+
+def home_page():
+    """Main home page for authenticated users"""
+    user_code = st.session_state.user_code
+    log_page_visit(user_code, "main")
+    
+    # Header with user info and logout
+    col1, col2, col3 = st.columns([3, 1, 1])
+    
+    with col1:
+        st.title("💬 Chat Application")
+    
+    with col2:
+        # Check if user is admin and show status
+        is_admin = get_current_user_admin_status()
+        admin_badge = "👑 **Admin**" if is_admin else ""
+        st.markdown(f"**User:** {user_code} {admin_badge}")
+    
+    with col3:
+        if st.button("Logout", use_container_width=True):
+            logout_user()
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Welcome message and navigation instructions
+    st.header("Welcome! Navigate using the sidebar.")
+    
+    # Quick stats
+    st.markdown("---")
+    show_user_stats()
+
+def logout_page():
+    """Logout page function for st.navigation"""
+    logout_user()
+    st.rerun()
+
+def setup_unauthenticated_navigation():
+    """Setup navigation for unauthenticated users"""
+    # Only show login page
+    pg = st.navigation([
+        st.Page(login_page, title="Login", icon="🔐")
+    ])
+    pg.run()
+
+def setup_authenticated_navigation():
+    """Setup navigation for authenticated users with role-based access"""
+    user_code = get_current_user_code()
+    is_admin = get_current_user_admin_status()
+    
+    # Define all pages
+    home = st.Page(home_page, title="Home", icon="🏠", default=True)
+    logout = st.Page(logout_page, title="Logout", icon="🚪")
+    
+    # Core pages available to all users
+    chat = st.Page("page_modules/chat.py", title="Chat", icon="💬")
+    prompt = st.Page("page_modules/prompt.py", title="Prompts", icon="📝")
+    
+    # Admin-only page
+    admin = st.Page("page_modules/admin.py", title="Admin", icon="⚙️")
+    
+    # Build navigation structure based on user role
+    page_dict = {
+        "Account": [home, logout],
+        "Main": [chat, prompt]
+    }
+    
+    # Add admin section only for admin users
+    if is_admin:
+        page_dict["Administration"] = [admin]
+    
+    # Create navigation
+    pg = st.navigation(page_dict)
+    pg.run()
 
 def show_consent_form():
     """Show data consent form for users who need to set consent"""
@@ -164,77 +239,6 @@ def show_consent_form():
                     del st.session_state.temp_code
                 st.rerun()
 
-def show_main_interface():
-    """Show main interface for authenticated users"""
-    user_code = st.session_state.user_code
-    log_page_visit(user_code, "main")
-    
-    # Header with user info and logout
-    col1, col2, col3 = st.columns([3, 1, 1])
-    
-    with col1:
-        st.title("💬 Chat Application")
-    
-    with col2:
-        # Check if user is admin and show status
-        is_admin = get_current_user_admin_status()
-        admin_badge = "👑 **Admin**" if is_admin else ""
-        st.markdown(f"**User:** {user_code} {admin_badge}")
-    
-    with col3:
-        if st.button("Logout", use_container_width=True):
-            logout_user()
-            st.rerun()
-    
-    st.markdown("---")
-    
-    # Navigation to main features
-    st.header("Welcome! What would you like to do?")
-    
-    # Check if user is admin
-    is_admin = get_current_user_admin_status()
-    
-    if is_admin:
-        # Admin layout with 3 columns
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.subheader("💬 Chat")
-            st.markdown("Start conversations using your prompts")
-            if st.button("Go to Chat", use_container_width=True, key="nav_chat"):
-                st.switch_page("pages/1_Chat.py")
-        
-        with col2:
-            st.subheader("📝 Prompts")
-            st.markdown("Create and manage your conversation prompts")
-            if st.button("Go to Prompts", use_container_width=True, key="nav_prompts"):
-                st.switch_page("pages/2_Prompt.py")
-        
-        with col3:
-            st.subheader("⚙️ Admin")
-            st.markdown("System administration and analytics")
-            if st.button("Go to Admin", use_container_width=True, key="nav_admin"):
-                st.switch_page("pages/3_Admin.py")
-    else:
-        # Regular user layout with 2 columns
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("📝 Prompts")
-            st.markdown("Create and manage your conversation prompts")
-            if st.button("Go to Prompts", use_container_width=True, key="nav_prompts"):
-                st.switch_page("pages/2_Prompt.py")
-    
-        with col2:
-            st.subheader("💬 Chat")
-            st.markdown("Start conversations using your prompts")
-            if st.button("Go to Chat", use_container_width=True, key="nav_chat"):
-                st.switch_page("pages/1_Chat.py")
-                
-    # Quick stats
-    st.markdown("---")
-    show_user_stats()
-
 def show_user_stats():
     """Display user statistics"""
     from utils.database import get_user_prompts, get_user_conversations, id_to_display_number
@@ -287,7 +291,7 @@ def show_user_stats():
                     st.write(f"**Messages:** {len(conv.get('messages', []))}")
                     if st.button(f"Continue", key=f"continue_{conv['conversation_id']}"):
                         st.session_state.selected_conversation = conv['conversation_id']
-                        st.switch_page("pages/1_Chat.py")
+                        st.switch_page("page_modules/chat.py")
                         
     except Exception as e:
         st.error(f"Error loading user statistics: {str(e)}")
