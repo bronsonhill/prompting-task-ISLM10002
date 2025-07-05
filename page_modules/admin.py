@@ -51,9 +51,11 @@ def main():
     show_admin_interface()
 
 def show_admin_interface():
-    """Show admin interface"""
-    # Tabs for different admin sections
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Statistics", "👥 Users", "💬 Conversations", "📝 Prompts", "⚙️ Admin Management"])
+    """Show admin interface based on user level"""
+    user_code = get_current_user_code()
+    
+    # Create tabs for different admin functions
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Statistics", "👥 Users", " Prompts", "⚙️ Admin Management"])
     
     with tab1:
         show_system_statistics()
@@ -62,12 +64,9 @@ def show_admin_interface():
         show_user_management()
     
     with tab3:
-        show_conversation_stats()
+        show_prompt_statistics()
     
     with tab4:
-        show_prompt_stats()
-    
-    with tab5:
         show_admin_management()
 
 def show_system_statistics():
@@ -76,67 +75,82 @@ def show_system_statistics():
     
     try:
         db = get_database()
+        if not db:
+            st.error("Database connection failed")
+            return
         
-        # Get collection counts
-        users_count = db.users.count_documents({})
-        prompts_count = db.prompts.count_documents({})
-        conversations_count = db.conversations.count_documents({})
-        logs_count = db.logs.count_documents({})
+        # Get basic counts
+        total_users = db.users.count_documents({})
+        total_prompts = db.prompts.count_documents({})
+        total_conversations = db.conversations.count_documents({})
+        
+        # Calculate total messages
+        pipeline = [
+            {"$project": {"message_count": {"$size": "$messages"}}},
+            {"$group": {"_id": None, "total": {"$sum": "$message_count"}}}
+        ]
+        result = list(db.conversations.aggregate(pipeline))
+        total_messages = result[0]["total"] if result else 0
         
         # Display metrics
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("Total Users", users_count)
+            st.metric("Total Users", total_users)
         
         with col2:
-            st.metric("Total Prompts", prompts_count)
+            st.metric("Total Prompts", total_prompts)
         
         with col3:
-            st.metric("Total Conversations", conversations_count)
+            st.metric("Total Conversations", total_conversations)
         
         with col4:
-            st.metric("Total Log Entries", logs_count)
+            st.metric("Total Messages", total_messages)
+        
+        st.markdown("---")
         
         # Recent activity
-        st.subheader("Recent Activity (Last 24 Hours)")
+        st.subheader("Recent Activity")
         
-        # Calculate 24 hours ago
-        twenty_four_hours_ago = datetime.utcnow() - timedelta(hours=24)
+        # Get recent users
+        recent_users = list(db.users.find({}).sort("created_at", -1).limit(5))
         
-        recent_users = db.users.count_documents({"created_at": {"$gte": twenty_four_hours_ago}})
-        recent_conversations = db.conversations.count_documents({"created_at": {"$gte": twenty_four_hours_ago}})
-        recent_prompts = db.prompts.count_documents({"created_at": {"$gte": twenty_four_hours_ago}})
+        if recent_users:
+            st.write("**Recent Users:**")
+            for user in recent_users:
+                st.write(f"- {user['code']} (Created: {user['created_at'].strftime('%Y-%m-%d %H:%M')})")
         
-        col1, col2, col3 = st.columns(3)
+        # Get recent conversations
+        recent_conversations = list(db.conversations.find({}).sort("created_at", -1).limit(5))
         
-        with col1:
-            st.metric("New Users", recent_users)
+        if recent_conversations:
+            st.write("**Recent Conversations:**")
+            for conv in recent_conversations:
+                st.write(f"- Conversation {id_to_display_number(conv['_id'])} by {conv['user_code']} (Created: {conv['created_at'].strftime('%Y-%m-%d %H:%M')})")
         
-        with col2:
-            st.metric("New Conversations", recent_conversations)
-        
-        with col3:
-            st.metric("New Prompts", recent_prompts)
-        
-        # Data consent stats
+        # Data consent statistics
         st.subheader("Data Consent Statistics")
         
-        consent_true = db.users.count_documents({"data_use_consent": True})
-        consent_false = db.users.count_documents({"data_use_consent": False})
-        consent_null = db.users.count_documents({"data_use_consent": None})
+        consent_stats = db.users.aggregate([
+            {"$group": {
+                "_id": "$data_use_consent",
+                "count": {"$sum": 1}
+            }}
+        ])
+        
+        consent_data = {stat["_id"]: stat["count"] for stat in consent_stats}
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.metric("Consent Given", consent_true)
+            st.metric("Consent Given", consent_data.get(True, 0))
         
         with col2:
-            st.metric("Consent Denied", consent_false)
+            st.metric("Consent Denied", consent_data.get(False, 0))
         
         with col3:
-            st.metric("Consent Pending", consent_null)
-            
+            st.metric("Consent Pending", consent_data.get(None, 0))
+        
     except Exception as e:
         st.error(f"Error loading statistics: {str(e)}")
 
@@ -146,6 +160,9 @@ def show_user_management():
     
     try:
         db = get_database()
+        if not db:
+            st.error("Database connection failed")
+            return
         
         # Search users
         search_term = st.text_input("Search users (by code):", placeholder="Enter user code")
@@ -184,99 +201,75 @@ def show_user_management():
             st.info("No users found")
             
     except Exception as e:
-        st.error(f"Error loading users: {str(e)}")
+        st.error(f"Error loading user data: {str(e)}")
 
-def show_conversation_stats():
-    """Show conversation statistics"""
-    st.header("💬 Conversation Analytics")
+def show_prompt_statistics():
+    """Show prompt statistics and management"""
+    st.header("📝 Prompt Statistics")
     
     try:
         db = get_database()
+        if not db:
+            st.error("Database connection failed")
+            return
         
-        # Top users by conversation count
-        pipeline = [
-            {"$group": {"_id": "$user_code", "count": {"$sum": 1}}},
-            {"$sort": {"count": -1}},
-            {"$limit": 10}
-        ]
+        # Get prompt statistics
+        total_prompts = db.prompts.count_documents({})
+        public_prompts = db.prompts.count_documents({"is_public": True})
+        private_prompts = total_prompts - public_prompts
         
-        top_users = list(db.conversations.aggregate(pipeline))
+        # Display metrics
+        col1, col2, col3 = st.columns(3)
         
-        if top_users:
-            st.subheader("Top 10 Users by Conversation Count")
-            for user in top_users:
-                st.write(f"**{user['_id']}:** {user['count']} conversations")
+        with col1:
+            st.metric("Total Prompts", total_prompts)
         
-        # Message statistics
-        st.subheader("Message Statistics")
+        with col2:
+            st.metric("Public Prompts", public_prompts)
         
-        conversations = list(db.conversations.find({}))
-        if conversations:
-            total_messages = sum(len(conv.get('messages', [])) for conv in conversations)
-            avg_messages = total_messages / len(conversations) if conversations else 0
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Total Messages", total_messages)
-            with col2:
-                st.metric("Avg Messages per Conversation", f"{avg_messages:.1f}")
+        with col3:
+            st.metric("Private Prompts", private_prompts)
         
-        # Recent conversations
-        st.subheader("Recent Conversations")
-        recent_conversations = list(db.conversations.find({}).sort("updated_at", -1).limit(10))
+        # Category breakdown
+        st.subheader("Prompts by Category")
         
-        for conv in recent_conversations:
-            with st.expander(f"{id_to_display_number(conv['conversation_id'])} - {conv['user_code']} - {conv['updated_at'].strftime('%Y-%m-%d %H:%M')}"):
-                st.write(f"**Prompt ID:** {id_to_display_number(conv['prompt_id'])}")
-                st.write(f"**Messages:** {len(conv.get('messages', []))}")
-                st.write(f"**Created:** {conv['created_at'].strftime('%Y-%m-%d %H:%M:%S')}")
-                st.write(f"**Last Updated:** {conv['updated_at'].strftime('%Y-%m-%d %H:%M:%S')}")
-                
-    except Exception as e:
-        st.error(f"Error loading conversation stats: {str(e)}")
-
-def show_prompt_stats():
-    """Show prompt statistics"""
-    st.header("📝 Prompt Analytics")
-    
-    try:
-        db = get_database()
+        category_stats = db.prompts.aggregate([
+            {"$group": {
+                "_id": "$category",
+                "count": {"$sum": 1}
+            }},
+            {"$sort": {"count": -1}}
+        ])
         
-        # Prompt usage statistics
-        pipeline = [
-            {"$group": {"_id": "$prompt_id", "count": {"$sum": 1}}},
-            {"$sort": {"count": -1}},
-            {"$limit": 10}
-        ]
+        category_data = list(category_stats)
         
-        prompt_usage = list(db.conversations.aggregate(pipeline))
+        if category_data:
+            for cat in category_data:
+                st.write(f"**{cat['_id'] or 'Uncategorized'}:** {cat['count']} prompts")
         
-        if prompt_usage:
-            st.subheader("Most Used Prompts")
-            for prompt_stat in prompt_usage:
-                prompt_id = prompt_stat['_id']
-                usage_count = prompt_stat['count']
-                
-                # Get prompt details
-                prompt_data = db.prompts.find_one({"prompt_id": prompt_id})
-                if prompt_data:
-                    with st.expander(f"{id_to_display_number(prompt_id)} - Used {usage_count} times"):
-                        st.write(f"**Created by:** {prompt_data['user_code']}")
-                        st.write(f"**Created:** {prompt_data['created_at'].strftime('%Y-%m-%d %H:%M')}")
-                        st.write(f"**Content:** {prompt_data['content'][:200]}{'...' if len(prompt_data['content']) > 200 else ''}")
-        
-        # Prompt creation trends
+        # Recent prompts
         st.subheader("Recent Prompts")
+        
         recent_prompts = list(db.prompts.find({}).sort("created_at", -1).limit(10))
         
-        for prompt in recent_prompts:
-            with st.expander(f"{id_to_display_number(prompt['prompt_id'])} - {prompt['user_code']} - {prompt['created_at'].strftime('%Y-%m-%d %H:%M')}"):
-                st.write(f"**Content:** {prompt['content']}")
-                
-                # Check usage
-                usage_count = db.conversations.count_documents({"prompt_id": prompt['prompt_id']})
-                st.write(f"**Used in conversations:** {usage_count}")
-                
+        if recent_prompts:
+            for prompt in recent_prompts:
+                with st.expander(f"Prompt {id_to_display_number(prompt['_id'])} - {prompt['title']}"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.write(f"**User:** {prompt['user_code']}")
+                        st.write(f"**Created:** {prompt['created_at'].strftime('%Y-%m-%d %H:%M')}")
+                        st.write(f"**Category:** {prompt.get('category', 'General')}")
+                    
+                    with col2:
+                        st.write(f"**Public:** {'Yes' if prompt.get('is_public', False) else 'No'}")
+                        st.write(f"**Updated:** {prompt['updated_at'].strftime('%Y-%m-%d %H:%M')}")
+                    
+                    st.write(f"**Content:** {prompt['content'][:200]}..." if len(prompt['content']) > 200 else f"**Content:** {prompt['content']}")
+        else:
+            st.info("No prompts found")
+            
     except Exception as e:
         st.error(f"Error loading prompt stats: {str(e)}")
 
@@ -285,6 +278,10 @@ def show_admin_management():
     st.header("⚙️ Admin Management")
     
     user_code = get_current_user_code()
+    if not user_code:
+        st.error("User not authenticated")
+        return
+        
     admin_codes = get_admin_codes_list()
     
     # Show current admin status
