@@ -74,7 +74,8 @@ def main():
     
     # Check if we need to load a specific conversation (from main page)
     if "selected_conversation" in st.session_state:
-        load_conversation(st.session_state.selected_conversation, user_code)
+        conversation_id = st.session_state.selected_conversation
+        load_conversation(conversation_id, user_code)
         del st.session_state.selected_conversation
     
     # Sidebar for conversation management
@@ -201,16 +202,29 @@ def start_new_conversation(prompt_id: str, user_code: str):
 
 def load_conversation(conversation_id: str, user_code: str):
     """Load an existing conversation"""
-    conversation = get_conversation_by_id(conversation_id)
-    if conversation and conversation["user_code"] == user_code:
+    try:
+        conversation = get_conversation_by_id(conversation_id)
+        
+        if not conversation:
+            st.error(f"Conversation {conversation_id} not found.")
+            return False
+            
+        if conversation["user_code"] != user_code:
+            st.error("Access denied to this conversation.")
+            return False
+            
+        # Set session state
         st.session_state.current_conversation = conversation_id
         st.session_state.current_prompt = conversation["prompt_id"]
-        st.session_state.messages = conversation["messages"]
+        st.session_state.messages = conversation.get("messages", [])
         
         log_conversation_continue(user_code, conversation_id)
-        st.rerun()
-    else:
-        st.error("Conversation not found or access denied.")
+        return True
+        
+    except Exception as e:
+        st.error(f"Error loading conversation: {str(e)}")
+        log_error(user_code, "conversation_load_error", str(e), {"conversation_id": conversation_id})
+        return False
 
 def clear_current_chat():
     """Clear current chat session"""
@@ -288,7 +302,20 @@ def handle_user_message(user_input: str, user_code: str):
                 return full_response
             
             # Use st.write_stream to display the streaming response
-            assistant_response = st.write_stream(stream_response)
+            # We need to collect the full response separately since st.write_stream returns a generator
+            full_response = ""
+            message_placeholder = st.empty()
+            
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    content = chunk.choices[0].delta.content
+                    full_response += content
+                    message_placeholder.markdown(full_response + "▌")
+            
+            # Display the final response
+            message_placeholder.markdown(full_response)
+            
+            assistant_response = full_response
             
             # Add assistant message
             assistant_message = {
