@@ -75,7 +75,7 @@ def show_system_statistics():
     
     try:
         db = get_database()
-        if not db:
+        if db is None:
             st.error("Database connection failed")
             return
         
@@ -126,7 +126,7 @@ def show_system_statistics():
         if recent_conversations:
             st.write("**Recent Conversations:**")
             for conv in recent_conversations:
-                st.write(f"- Conversation {id_to_display_number(conv['_id'])} by {conv['user_code']} (Created: {conv['created_at'].strftime('%Y-%m-%d %H:%M')})")
+                st.write(f"- Conversation {id_to_display_number(str(conv['_id']))} by {conv['user_code']} (Created: {conv['created_at'].strftime('%Y-%m-%d %H:%M')})")
         
         # Data consent statistics
         st.subheader("Data Consent Statistics")
@@ -160,7 +160,7 @@ def show_user_management():
     
     try:
         db = get_database()
-        if not db:
+        if db is None:
             st.error("Database connection failed")
             return
         
@@ -209,7 +209,7 @@ def show_prompt_statistics():
     
     try:
         db = get_database()
-        if not db:
+        if db is None:
             st.error("Database connection failed")
             return
         
@@ -254,7 +254,7 @@ def show_prompt_statistics():
         
         if recent_prompts:
             for prompt in recent_prompts:
-                with st.expander(f"Prompt {id_to_display_number(prompt['_id'])} - {prompt['title']}"):
+                with st.expander(f"Prompt {prompt.get('prompt_id', 'Unknown')} - {prompt.get('content', 'No content')[:50]}..."):
                     col1, col2 = st.columns(2)
                     
                     with col1:
@@ -350,7 +350,7 @@ def show_admin_management():
                     )
                     
                     if st.form_submit_button("Remove Admin Code"):
-                        if remove_admin_code_auth(code_to_remove, user_code):
+                        if code_to_remove and remove_admin_code_auth(code_to_remove, user_code):
                             st.success(f"✅ Admin code '{code_to_remove}' removed successfully!")
                             st.rerun()
                         else:
