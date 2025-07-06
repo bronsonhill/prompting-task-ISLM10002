@@ -15,10 +15,12 @@ def create_csv_download(data, filename, display_name=None):
         df = pd.DataFrame(data)
         csv = df.to_csv(index=False)
         button_label = display_name if display_name else f"📥 Download {filename}"
+        # Adjust timezone by subtracting 2 hours
+        adjusted_time = datetime.now() + timedelta(hours=11)
         st.download_button(
             label=button_label,
             data=csv,
-            file_name=f"{filename}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            file_name=f"{filename}_{adjusted_time.strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv"
         )
 
@@ -172,43 +174,47 @@ def show_system_statistics():
         # Prepare data for CSV export
         stats_data = []
         
+        # Adjust timezone by subtracting 2 hours
+        adjusted_time = datetime.now() + timedelta(hours=11)
+        current_timestamp = adjusted_time.strftime('%Y-%m-%d %H:%M:%S')
+        
         # Add basic counts
         stats_data.append({
             "Metric": "Total Users",
             "Count": total_users,
-            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            "Timestamp": current_timestamp
         })
         stats_data.append({
             "Metric": "Total Prompts", 
             "Count": total_prompts,
-            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            "Timestamp": current_timestamp
         })
         stats_data.append({
             "Metric": "Total Conversations",
             "Count": total_conversations,
-            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            "Timestamp": current_timestamp
         })
         stats_data.append({
             "Metric": "Total Messages",
             "Count": total_messages,
-            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            "Timestamp": current_timestamp
         })
         
         # Add consent data
         stats_data.append({
             "Metric": "Consent Given",
             "Count": consent_data.get(True, 0),
-            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            "Timestamp": current_timestamp
         })
         stats_data.append({
             "Metric": "Consent Denied", 
             "Count": consent_data.get(False, 0),
-            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            "Timestamp": current_timestamp
         })
         stats_data.append({
             "Metric": "Consent Pending",
             "Count": consent_data.get(None, 0),
-            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            "Timestamp": current_timestamp
         })
         
         create_csv_download(stats_data, "system_statistics", "📊 Download System Statistics")
@@ -240,12 +246,16 @@ def show_system_statistics():
             else:
                 full_conversation = "No messages in this conversation"
             
+            # Adjust timezone for database timestamps
+            created_at_adjusted = conv['created_at'] + timedelta(hours=11)
+            updated_at_adjusted = conv['updated_at'] + timedelta(hours=11)
+            
             conversations_csv_data.append({
                 "Conversation ID": conv.get('conversation_id', 'Unknown'),
                 "User Code": conv['user_code'],
                 "Prompt ID": conv.get('prompt_id', 'Unknown'),
-                "Created At": conv['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
-                "Updated At": conv['updated_at'].strftime('%Y-%m-%d %H:%M:%S'),
+                "Created At": created_at_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
+                "Updated At": updated_at_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
                 "Message Count": message_count,
                 "Full Conversation": full_conversation.strip()
             })
@@ -308,10 +318,14 @@ def show_user_management():
         # Prepare user data for CSV export
         users_csv_data = []
         for user in users:
+            # Adjust timezone for database timestamps
+            created_at_adjusted = user['created_at'] + timedelta(hours=11)
+            last_login_adjusted = user.get('last_login') + timedelta(hours=11) if user.get('last_login') else None
+            
             users_csv_data.append({
                 "User Code": user['code'],
-                "Created At": user['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
-                "Last Login": user.get('last_login', 'Never').strftime('%Y-%m-%d %H:%M:%S') if user.get('last_login') else 'Never',
+                "Created At": created_at_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
+                "Last Login": last_login_adjusted.strftime('%Y-%m-%d %H:%M:%S') if last_login_adjusted else 'Never',
                 "Data Consent": "Given" if user.get('data_use_consent') is True else "Denied" if user.get('data_use_consent') is False else "Pending",
                 "Prompts Count": db.prompts.count_documents({"user_code": user['code']}),
                 "Conversations Count": db.conversations.count_documents({"user_code": user['code']})
@@ -396,11 +410,15 @@ def show_prompt_statistics():
         # Prepare prompt data for CSV export
         prompts_csv_data = []
         for prompt in recent_prompts:
+            # Adjust timezone for database timestamps
+            created_at_adjusted = prompt['created_at'] + timedelta(hours=11)
+            updated_at_adjusted = prompt['updated_at'] + timedelta(hours=11)
+            
             prompts_csv_data.append({
                 "Prompt ID": prompt.get('prompt_id', 'Unknown'),
                 "User Code": prompt['user_code'],
-                "Created At": prompt['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
-                "Updated At": prompt['updated_at'].strftime('%Y-%m-%d %H:%M:%S'),
+                "Created At": created_at_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
+                "Updated At": updated_at_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
                 "Category": prompt.get('category', 'General'),
                 "Is Public": 'Yes' if prompt.get('is_public', False) else 'No',
                 "Content Preview": prompt.get('content', 'No content')[:100] + "..." if len(prompt.get('content', '')) > 100 else prompt.get('content', 'No content')
