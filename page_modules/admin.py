@@ -3,10 +3,24 @@ Admin page for the Chat Application MVP
 Simple admin interface for viewing system statistics
 """
 import streamlit as st
+import pandas as pd
 from datetime import datetime, timedelta
 from utils.auth import require_authentication, get_current_user_code, is_admin_user, get_admin_codes_list, add_admin_code_auth, remove_admin_code_auth, is_super_admin_user, get_admin_level_user
 from utils.database import get_database, id_to_display_number
 from utils.logging import log_page_visit
+
+def create_csv_download(data, filename, display_name=None):
+    """Create a CSV download button"""
+    if data:
+        df = pd.DataFrame(data)
+        csv = df.to_csv(index=False)
+        button_label = display_name if display_name else f"📥 Download {filename}"
+        st.download_button(
+            label=button_label,
+            data=csv,
+            file_name=f"{filename}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
 
 def main():
     st.set_page_config(
@@ -151,6 +165,93 @@ def show_system_statistics():
         with col3:
             st.metric("Consent Pending", consent_data.get(None, 0))
         
+        # CSV Download for System Statistics
+        st.markdown("---")
+        st.subheader("📊 Data Export")
+        
+        # Prepare data for CSV export
+        stats_data = []
+        
+        # Add basic counts
+        stats_data.append({
+            "Metric": "Total Users",
+            "Count": total_users,
+            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        stats_data.append({
+            "Metric": "Total Prompts", 
+            "Count": total_prompts,
+            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        stats_data.append({
+            "Metric": "Total Conversations",
+            "Count": total_conversations,
+            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        stats_data.append({
+            "Metric": "Total Messages",
+            "Count": total_messages,
+            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        
+        # Add consent data
+        stats_data.append({
+            "Metric": "Consent Given",
+            "Count": consent_data.get(True, 0),
+            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        stats_data.append({
+            "Metric": "Consent Denied", 
+            "Count": consent_data.get(False, 0),
+            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        stats_data.append({
+            "Metric": "Consent Pending",
+            "Count": consent_data.get(None, 0),
+            "Timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        
+        create_csv_download(stats_data, "system_statistics", "📊 Download System Statistics")
+        
+        # Get conversations data for CSV export
+        all_conversations = list(db.conversations.find({}).sort("created_at", -1))
+        conversations_csv_data = []
+        
+        for conv in all_conversations:
+            # Count messages in this conversation
+            message_count = len(conv.get('messages', []))
+            
+            # Format the full conversation as a dialogue
+            full_conversation = ""
+            if conv.get('messages'):
+                for i, message in enumerate(conv['messages']):
+                    role = message.get('role', 'unknown')
+                    content = message.get('content', '')
+                    
+                    # Format role names for better readability
+                    if role == 'user':
+                        role_display = 'User'
+                    elif role == 'assistant':
+                        role_display = 'Tutor'
+                    else:
+                        role_display = role.title()
+                    
+                    full_conversation += f"{role_display}: {content}\n\n"
+            else:
+                full_conversation = "No messages in this conversation"
+            
+            conversations_csv_data.append({
+                "Conversation ID": conv.get('conversation_id', 'Unknown'),
+                "User Code": conv['user_code'],
+                "Prompt ID": conv.get('prompt_id', 'Unknown'),
+                "Created At": conv['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
+                "Updated At": conv['updated_at'].strftime('%Y-%m-%d %H:%M:%S'),
+                "Message Count": message_count,
+                "Full Conversation": full_conversation.strip()
+            })
+        
+        create_csv_download(conversations_csv_data, "conversations_data", "💬 Download All Conversations")
+        
     except Exception as e:
         st.error(f"Error loading statistics: {str(e)}")
 
@@ -199,6 +300,24 @@ def show_user_management():
                         st.write(f"**Conversations:** {conv_count}")
         else:
             st.info("No users found")
+        
+        # CSV Download for Users
+        st.markdown("---")
+        st.subheader("📊 User Data Export")
+        
+        # Prepare user data for CSV export
+        users_csv_data = []
+        for user in users:
+            users_csv_data.append({
+                "User Code": user['code'],
+                "Created At": user['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
+                "Last Login": user.get('last_login', 'Never').strftime('%Y-%m-%d %H:%M:%S') if user.get('last_login') else 'Never',
+                "Data Consent": "Given" if user.get('data_use_consent') is True else "Denied" if user.get('data_use_consent') is False else "Pending",
+                "Prompts Count": db.prompts.count_documents({"user_code": user['code']}),
+                "Conversations Count": db.conversations.count_documents({"user_code": user['code']})
+            })
+        
+        create_csv_download(users_csv_data, "users_data", "👥 Download Users Data")
             
     except Exception as e:
         st.error(f"Error loading user data: {str(e)}")
@@ -269,6 +388,25 @@ def show_prompt_statistics():
                     st.write(f"**Content:** {prompt['content'][:200]}..." if len(prompt['content']) > 200 else f"**Content:** {prompt['content']}")
         else:
             st.info("No prompts found")
+        
+        # CSV Download for Prompts
+        st.markdown("---")
+        st.subheader("📊 Prompt Data Export")
+        
+        # Prepare prompt data for CSV export
+        prompts_csv_data = []
+        for prompt in recent_prompts:
+            prompts_csv_data.append({
+                "Prompt ID": prompt.get('prompt_id', 'Unknown'),
+                "User Code": prompt['user_code'],
+                "Created At": prompt['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
+                "Updated At": prompt['updated_at'].strftime('%Y-%m-%d %H:%M:%S'),
+                "Category": prompt.get('category', 'General'),
+                "Is Public": 'Yes' if prompt.get('is_public', False) else 'No',
+                "Content Preview": prompt.get('content', 'No content')[:100] + "..." if len(prompt.get('content', '')) > 100 else prompt.get('content', 'No content')
+            })
+        
+        create_csv_download(prompts_csv_data, "prompts_data", "📝 Download Prompts Data")
             
     except Exception as e:
         st.error(f"Error loading prompt stats: {str(e)}")
