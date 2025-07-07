@@ -99,7 +99,8 @@ def set_data_consent(code: str, consent: bool) -> bool:
             {"code": code},
             {"$set": {"data_use_consent": consent}}
         )
-        return result.modified_count > 0
+        # Return True if the document was found (matched_count > 0), regardless of whether it was modified
+        return result.matched_count > 0
     except Exception as e:
         st.error(f"Error setting data consent: {str(e)}")
         return False

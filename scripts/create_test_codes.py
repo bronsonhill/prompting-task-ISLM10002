@@ -10,7 +10,7 @@ from utils.database import connect_mongodb, create_user, generate_unique_code
 from datetime import datetime
 import argparse
 
-def create_test_codes(num_codes=10):
+def create_test_codes(num_codes=1):
     """Create test user codes"""
     print(f"Creating {num_codes} test user codes...")
     
@@ -85,7 +85,7 @@ def main():
         "--count", 
         type=int, 
         default=1, 
-        help="Number of test codes to create (default: 10)"
+        help="Number of test codes to create (default: 1)"
     )
     parser.add_argument(
         "--list", 
