@@ -396,37 +396,50 @@ def is_super_admin(code: str) -> bool:
     """Check if a code is a super admin"""
     return get_admin_level(code) == "super_admin"
 
-def initialize_default_admin_codes():
-    """Initialize default admin codes if they don't exist"""
+def generate_unique_admin_code(length: int = 5) -> str:
+    """Generate a unique admin code"""
+    db = get_database()
+    admin_codes_collection = db.admin_codes
+    
+    characters = string.ascii_uppercase + string.digits
+    
+    while True:
+        code = ''.join(random.choices(characters, k=length))
+        if not admin_codes_collection.find_one({"code": code}):
+            return code
+
+def create_initial_admin_code(level: str = "super_admin", added_by: str = "system") -> Optional[str]:
+    """Create the first admin code in the system (for initial setup)"""
     try:
         db = get_database()
         admin_codes_collection = db.admin_codes
         
-        # Check if admin codes collection exists and has any active codes
+        # Check if any admin codes already exist
         existing_codes = admin_codes_collection.count_documents({"is_active": True})
         
-        if existing_codes == 0:
-            # Add default admin codes
-            default_codes = [
-                {"code": "ADMIN", "level": "super_admin"},
-                {"code": "SUPER", "level": "super_admin"},
-                {"code": "TEST1", "level": "admin"},
-                {"code": "ADMIN1", "level": "admin"},
-                {"code": "ADMIN2", "level": "admin"}
-            ]
-            
-            for admin_data in default_codes:
-                add_admin_code(
-                    code=admin_data["code"],
-                    level=admin_data["level"],
-                    added_by="system_initialization"
-                )
-            
-            print("Default admin codes initialized successfully")
-            return True
+        if existing_codes > 0:
+            print("Admin codes already exist. Use add_admin_code() to add more.")
+            return None
         
-        return False
+        # Generate a unique admin code
+        code = generate_unique_admin_code()
         
+        # Add the admin code
+        if add_admin_code(code, level, added_by):
+            print(f"✅ Initial admin code created: {code}")
+            print(f"⚠️  IMPORTANT: Save this code securely! It cannot be recovered.")
+            return code
+        else:
+            print("❌ Failed to create initial admin code")
+            return None
+            
     except Exception as e:
-        st.error(f"Error initializing default admin codes: {str(e)}")
-        return False
+        st.error(f"Error creating initial admin code: {str(e)}")
+        return None
+
+def initialize_default_admin_codes():
+    """Initialize default admin codes if they don't exist - DEPRECATED"""
+    print("⚠️  WARNING: initialize_default_admin_codes() is deprecated.")
+    print("   Use create_initial_admin_code() for secure admin code creation.")
+    print("   Or use the admin management script: python scripts/manage_admin_codes.py --add CODE --level admin")
+    return False

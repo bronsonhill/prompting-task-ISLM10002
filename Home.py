@@ -28,12 +28,16 @@ def main():
     # Initialize session
     initialize_session()
     
-    # Initialize admin codes if needed
+    # Check for admin codes (but don't create hardcoded ones)
     try:
-        from utils.database import initialize_default_admin_codes
-        initialize_default_admin_codes()
+        from utils.database import get_admin_codes
+        admin_codes = get_admin_codes()
+        if not admin_codes:
+            st.warning("⚠️ **No admin codes found in database.**")
+            st.info("To create your first admin code, run: `python scripts/manage_admin_codes.py --add YOUR_CODE --level super_admin`")
+            st.info("Or use the secure initial setup: `python scripts/manage_admin_codes.py --init-secure`")
     except Exception as e:
-        st.error(f"Error initializing admin codes: {str(e)}")
+        st.error(f"Error checking admin codes: {str(e)}")
     
     # Handle navigation based on authentication status
     if is_authenticated():
@@ -138,8 +142,8 @@ def setup_authenticated_navigation():
     logout = st.Page(logout_page, title="Logout", icon="🚪")
     
     # Core pages available to all users
-    chat = st.Page("page_modules/chat.py", title="Chat", icon="💬")
     prompt = st.Page("page_modules/prompt.py", title="Prompts", icon="📝")
+    chat = st.Page("page_modules/chat.py", title="Chat", icon="💬")
     
     # Admin-only page
     admin = st.Page("page_modules/admin.py", title="Admin", icon="⚙️")
@@ -147,7 +151,7 @@ def setup_authenticated_navigation():
     # Build navigation structure based on user role
     page_dict = {
         "Account": [home, logout],
-        "Main": [chat, prompt]
+        "Main": [prompt, chat]
     }
     
     # Add admin section only for admin users
@@ -173,25 +177,17 @@ def show_consent_form():
     if is_new_user:
         st.info(f"Welcome! We see this is your first time using the code: **{temp_code}**")
     else:
-        st.info(f"Welcome back! We need you to reconsider your data consent preferences for code: **{temp_code}**")
+        st.info(f"Welcome back! We need you to consider your data consent preferences for code: **{temp_code}**")
     
     st.markdown("""
-    ### Data Collection Notice
-    
-    This application collects and stores the following data for research purposes:
-    - Your chat conversations and messages
-    - Prompts you create
-    - Usage patterns and timestamps
-    - System interactions and logs
-    
-    **Important:** Data is collected regardless of your consent choice below. 
-    Your consent only affects how the data may be used for research purposes.
+        Welcome to the Socratic Chatbot Application! This is the tool you will use to design your own Socratic Chatbots to learn about topics relevant to Islam in the Modern World.  
+        How students use the tool and whether it is helpful will be studied after the subject is concluded. Please indicate your consent preferences below:
     """)
     
     with st.form("consent_form"):
         data_consent = st.checkbox(
-            "I consent to the use of my data for research purposes",
-            help="This consent affects data usage, not collection. Data is logged regardless of this choice."
+            "I consent to the use of my anonymised data for the purposes of research.",
+            help="Please note: Data is collected regardless of your consent indication. Your consent only affects how the data may be used for research purposes."
         )
         
         col1, col2 = st.columns(2)

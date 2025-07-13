@@ -21,7 +21,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.database import (
     add_admin_code, remove_admin_code, get_admin_codes, 
-    is_admin_code, get_admin_level, initialize_default_admin_codes
+    is_admin_code, get_admin_level, create_initial_admin_code
 )
 
 def add_admin_code_script(code: str, level: str, added_by: str = "script"):
@@ -105,20 +105,20 @@ def list_admin_codes_script():
     print(f"   Regular admins: {len(regular_admins)}")
 
 def initialize_admin_codes_script():
-    """Initialize default admin codes"""
-    print("🚀 Initializing default admin codes...")
+    """Initialize secure admin codes"""
+    print("🚀 Creating secure initial admin code...")
     
-    if initialize_default_admin_codes():
-        print("✅ Default admin codes initialized successfully!")
-        print("\nDefault codes created:")
-        print("   ADMIN  - Super Administrator")
-        print("   SUPER  - Super Administrator")
-        print("   TEST1  - Administrator")
-        print("   ADMIN1 - Administrator")
-        print("   ADMIN2 - Administrator")
+    admin_code = create_initial_admin_code()
+    if admin_code:
+        print("✅ Secure admin code created successfully!")
+        print(f"\n🔐 ADMIN CODE: {admin_code}")
+        print("⚠️  IMPORTANT: Save this code securely! It cannot be recovered.")
+        print("   Use this code to log in as a super administrator.")
+        print("   You can then create additional admin codes through the web interface.")
     else:
         print("ℹ️  Admin codes already exist in database.")
         print("   Use --list to see current admin codes.")
+        print("   Use --add to create additional admin codes.")
 
 def main():
     parser = argparse.ArgumentParser(
@@ -126,7 +126,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python manage_admin_codes.py --init
+  python manage_admin_codes.py --init-secure
   python manage_admin_codes.py --list
   python manage_admin_codes.py --add ABC12 --level admin
   python manage_admin_codes.py --add XYZ99 --level super_admin
@@ -162,18 +162,27 @@ Examples:
     parser.add_argument(
         "--init", 
         action="store_true",
-        help="Initialize default admin codes"
+        help="Initialize secure admin code (DEPRECATED - use --init-secure)"
+    )
+    
+    parser.add_argument(
+        "--init-secure", 
+        action="store_true",
+        help="Create secure initial admin code (recommended for first-time setup)"
     )
     
     args = parser.parse_args()
     
     # Check if at least one action is specified
-    if not any([args.add, args.remove, args.list, args.init]):
+    if not any([args.add, args.remove, args.list, args.init, args.init_secure]):
         parser.print_help()
         return
     
     try:
-        if args.init:
+        if args.init_secure:
+            initialize_admin_codes_script()
+        elif args.init:
+            print("⚠️  --init is deprecated. Use --init-secure instead.")
             initialize_admin_codes_script()
         elif args.list:
             list_admin_codes_script()

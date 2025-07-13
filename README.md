@@ -188,21 +188,29 @@ Admin codes are now stored in the database instead of being hardcoded. This prov
 - **Audit Trail**: Track who added/removed admin codes and when
 - **Soft Deletion**: Admin codes are deactivated rather than deleted
 
-### Default Admin Codes
+### Secure Admin Code Management
 
-The following codes are automatically created when the app starts:
-- `ADMIN` - Super Administrator
-- `SUPER` - Super Administrator  
-- `TEST1` - Administrator
-- `ADMIN1` - Administrator
-- `ADMIN2` - Administrator
+**⚠️ SECURITY UPDATE**: Admin codes are no longer hardcoded for security reasons.
+
+**For First-Time Setup:**
+```bash
+# Create your first secure admin code
+python scripts/manage_admin_codes.py --init-secure
+```
+
+**For Additional Admin Codes:**
+```bash
+# Add new admin codes
+python scripts/manage_admin_codes.py --add YOUR_CODE --level admin
+python scripts/manage_admin_codes.py --add YOUR_CODE --level super_admin
+```
 
 ### Managing Admin Codes
 
 #### Via Script (Recommended)
 ```bash
-# Initialize default admin codes
-python scripts/manage_admin_codes.py --init
+# Create secure initial admin code (first-time setup)
+python scripts/manage_admin_codes.py --init-secure
 
 # List all admin codes
 python scripts/manage_admin_codes.py --list
@@ -212,7 +220,7 @@ python scripts/manage_admin_codes.py --add ABC12 --level admin
 python scripts/manage_admin_codes.py --add XYZ99 --level super_admin
 
 # Remove an admin code (cannot remove super admins)
-python scripts/manage_admin_codes.py --remove TEST1
+python scripts/manage_admin_codes.py --remove ABC12
 ```
 
 #### Via Admin Interface
@@ -240,11 +248,11 @@ python scripts/manage_admin_codes.py --remove TEST1
 
 ### Admin Codes
 
-Admin codes are now managed through the database. Use the management script:
+Admin codes are now managed securely through the database. Use the management script:
 
 ```bash
-# Initialize default codes
-python scripts/manage_admin_codes.py --init
+# Create secure initial admin code (first-time setup)
+python scripts/manage_admin_codes.py --init-secure
 
 # Add new admin codes
 python scripts/manage_admin_codes.py --add YOUR_CODE --level admin
