@@ -111,8 +111,8 @@ def save_prompt(user_code: str, content: str, documents: List[Dict] = None) -> O
         db = get_database()
         prompts_collection = db.prompts
         
-        # Generate next prompt ID
-        latest_prompt = prompts_collection.find().sort("prompt_id", -1).limit(1)
+        # Generate next prompt ID for this specific user
+        latest_prompt = prompts_collection.find({"user_code": user_code}).sort("prompt_id", -1).limit(1)
         latest_prompt = list(latest_prompt)
         
         if latest_prompt:
@@ -304,8 +304,8 @@ def save_conversation(user_code: str, prompt_id: str, messages: List[Dict]) -> O
         db = get_database()
         conversations_collection = db.conversations
         
-        # Generate next conversation ID
-        latest_conversation = conversations_collection.find().sort("conversation_id", -1).limit(1)
+        # Generate next conversation ID for this specific user
+        latest_conversation = conversations_collection.find({"user_code": user_code}).sort("conversation_id", -1).limit(1)
         latest_conversation = list(latest_conversation)
         
         if latest_conversation:
