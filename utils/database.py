@@ -105,7 +105,7 @@ def set_data_consent(code: str, consent: bool) -> bool:
         st.error(f"Error setting data consent: {str(e)}")
         return False
 
-def save_prompt(user_code: str, content: str) -> Optional[str]:
+def save_prompt(user_code: str, content: str, documents: List[Dict] = None) -> Optional[str]:
     """Save a new prompt and return its ID"""
     try:
         db = get_database()
@@ -123,13 +123,22 @@ def save_prompt(user_code: str, content: str) -> Optional[str]:
         
         # Count tokens for the prompt
         from .token_counter import count_tokens
-        token_count = count_tokens(content)
+        prompt_token_count = count_tokens(content)
+        
+        # Count tokens for documents if provided
+        document_token_count = 0
+        if documents:
+            for doc in documents:
+                document_token_count += count_tokens(doc.get('content', ''))
         
         prompt_data = {
             "prompt_id": next_id,
             "user_code": user_code,
             "content": content,
-            "token_count": token_count,
+            "documents": documents or [],
+            "prompt_token_count": prompt_token_count,
+            "document_token_count": document_token_count,
+            "total_token_count": prompt_token_count + document_token_count,
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow()
         }
@@ -168,27 +177,116 @@ def get_prompt_by_id(prompt_id: str) -> Optional[Dict]:
         st.error(f"Error getting prompt: {str(e)}")
         return None
 
+def process_uploaded_document(uploaded_file) -> Optional[Dict]:
+    """Process an uploaded document and extract its content"""
+    try:
+        import io
+        
+        file_info = {
+            "filename": uploaded_file.name,
+            "file_type": uploaded_file.type,
+            "file_size": uploaded_file.size,
+            "uploaded_at": datetime.utcnow()
+        }
+        
+        # Read file content based on type
+        if uploaded_file.type == "application/pdf":
+            # Handle PDF files
+            try:
+                import PyPDF2
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.read()))
+                content = ""
+                for page in pdf_reader.pages:
+                    content += page.extract_text() + "\n"
+                file_info["content"] = content.strip()
+            except ImportError:
+                st.error("PyPDF2 is required for PDF processing. Please install it: pip install PyPDF2")
+                return None
+            
+        elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            # Handle DOCX files
+            try:
+                import docx
+                doc = docx.Document(io.BytesIO(uploaded_file.read()))
+                content = ""
+                for paragraph in doc.paragraphs:
+                    content += paragraph.text + "\n"
+                file_info["content"] = content.strip()
+            except ImportError:
+                st.error("python-docx is required for DOCX processing. Please install it: pip install python-docx")
+                return None
+            
+        elif uploaded_file.type == "text/plain":
+            # Handle text files
+            content = uploaded_file.read().decode("utf-8")
+            file_info["content"] = content
+            
+        else:
+            st.error(f"Unsupported file type: {uploaded_file.type}")
+            return None
+        
+        # Validate content
+        if not file_info.get("content", "").strip():
+            st.warning(f"Warning: Document '{uploaded_file.name}' appears to be empty or could not be read properly.")
+        
+        return file_info
+        
+    except Exception as e:
+        st.error(f"Error processing document '{uploaded_file.name}': {str(e)}")
+        return None
+
 def update_prompt_token_counts():
     """Update all existing prompts with token counts"""
     try:
         db = get_database()
         prompts_collection = db.prompts
         
-        # Get all prompts that don't have token_count
-        prompts_without_tokens = list(prompts_collection.find({"token_count": {"$exists": False}}))
+        # Get all prompts that need token count updates
+        prompts_to_update = list(prompts_collection.find({
+            "$or": [
+                {"token_count": {"$exists": False}},
+                {"prompt_token_count": {"$exists": False}},
+                {"document_token_count": {"$exists": False}},
+                {"total_token_count": {"$exists": False}}
+            ]
+        }))
         
-        if not prompts_without_tokens:
+        if not prompts_to_update:
             return 0
         
         from .token_counter import count_tokens
         updated_count = 0
         
-        for prompt in prompts_without_tokens:
-            token_count = count_tokens(prompt['content'])
+        for prompt in prompts_to_update:
+            # Calculate prompt token count
+            prompt_token_count = count_tokens(prompt['content'])
+            
+            # Calculate document token count
+            document_token_count = 0
+            if prompt.get('documents'):
+                for doc in prompt['documents']:
+                    document_token_count += count_tokens(doc.get('content', ''))
+            
+            # Calculate total token count
+            total_token_count = prompt_token_count + document_token_count
+            
+            # Update with new token count fields
+            set_data = {
+                "prompt_token_count": prompt_token_count,
+                "document_token_count": document_token_count,
+                "total_token_count": total_token_count
+            }
+            
+            # Prepare update operation
+            update_operation = {"$set": set_data}
+            
+            # Remove legacy token_count field if it exists
+            if "token_count" in prompt:
+                update_operation["$unset"] = {"token_count": ""}
             
             result = prompts_collection.update_one(
                 {"_id": prompt['_id']},
-                {"$set": {"token_count": token_count}}
+                update_operation
             )
             
             if result.modified_count > 0:

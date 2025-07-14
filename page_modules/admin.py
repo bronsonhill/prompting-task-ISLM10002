@@ -57,10 +57,12 @@ def generate_prompts_csv_data():
                 "Prompt ID": prompt.get('prompt_id', 'Unknown'),
                 "User Code": prompt['user_code'],
                 "Content": prompt['content'],
-                "Token Count": prompt.get('token_count', 0),
+                "Prompt Token Count": prompt.get('prompt_token_count', 0),
+                "Document Token Count": prompt.get('document_token_count', 0),
+                "Total Token Count": prompt.get('total_token_count', 0),
                 "Total Input Tokens": prompt_total_input_tokens,
                 "Total Output Tokens": prompt_total_output_tokens,
-                "Total Tokens": prompt_total_input_tokens + prompt_total_output_tokens,
+                "Total Conversation Tokens": prompt_total_input_tokens + prompt_total_output_tokens,
                 "Created At": created_at_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
                 "Updated At": updated_at_adjusted.strftime('%Y-%m-%d %H:%M:%S')
             })
@@ -689,35 +691,41 @@ def show_prompt_statistics():
         st.markdown("---")
         st.subheader("Token Statistics")
         
-        # Calculate total tokens across all prompts
-        token_pipeline = [
+        # Calculate total tokens across all prompts (new fields)
+        new_token_pipeline = [
             {"$group": {
                 "_id": None,
-                "total_tokens": {"$sum": "$token_count"},
-                "avg_tokens": {"$avg": "$token_count"},
-                "max_tokens": {"$max": "$token_count"},
-                "min_tokens": {"$min": "$token_count"}
+                "total_prompt_tokens": {"$sum": {"$ifNull": ["$prompt_token_count", 0]}},
+                "total_document_tokens": {"$sum": {"$ifNull": ["$document_token_count", 0]}},
+                "total_combined_tokens": {"$sum": {"$ifNull": ["$total_token_count", 0]}},
+                "avg_prompt_tokens": {"$avg": {"$ifNull": ["$prompt_token_count", 0]}},
+                "avg_document_tokens": {"$avg": {"$ifNull": ["$document_token_count", 0]}},
+                "max_prompt_tokens": {"$max": {"$ifNull": ["$prompt_token_count", 0]}},
+                "max_document_tokens": {"$max": {"$ifNull": ["$document_token_count", 0]}}
             }}
         ]
-        token_stats = list(db.prompts.aggregate(token_pipeline))
+        new_token_stats = list(db.prompts.aggregate(new_token_pipeline))
         
-        if token_stats:
-            stats = token_stats[0]
+        if new_token_stats:
+            stats = new_token_stats[0]
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                st.metric("Total Prompt Tokens", f"{stats.get('total_tokens', 0):,}")
+                st.metric("Total Prompt Tokens", f"{stats.get('total_prompt_tokens', 0):,}")
+                st.metric("Total Document Tokens", f"{stats.get('total_document_tokens', 0):,}")
             
             with col2:
-                st.metric("Average Tokens per Prompt", f"{stats.get('avg_tokens', 0):.1f}")
+                st.metric("Total Combined Tokens", f"{stats.get('total_combined_tokens', 0):,}")
+                st.metric("Avg Prompt Tokens", f"{stats.get('avg_prompt_tokens', 0):.1f}")
             
             with col3:
-                st.metric("Max Tokens in Prompt", f"{stats.get('max_tokens', 0):,}")
+                st.metric("Avg Document Tokens", f"{stats.get('avg_document_tokens', 0):.1f}")
+                st.metric("Max Prompt Tokens", f"{stats.get('max_prompt_tokens', 0):,}")
             
             with col4:
-                st.metric("Min Tokens in Prompt", f"{stats.get('min_tokens', 0):,}")
+                st.metric("Max Document Tokens", f"{stats.get('max_document_tokens', 0):,}")
         else:
-            st.info("No token statistics available. Update prompts with token counts first.")
+            st.info("No token statistics available. Run the token update script to calculate token counts for existing prompts.")
         
         # Category breakdown
         st.subheader("Prompts by Category")
@@ -754,7 +762,16 @@ def show_prompt_statistics():
                     with col2:
                         st.write(f"**Public:** {'Yes' if prompt.get('is_public', False) else 'No'}")
                         st.write(f"**Updated:** {prompt['updated_at'].strftime('%Y-%m-%d %H:%M')}")
-                        st.write(f"**Token Count:** {prompt.get('token_count', 'Not calculated')}")
+                        
+                        # Show token count fields
+                        if prompt.get('prompt_token_count') is not None:
+                            st.write(f"**Prompt Tokens:** {prompt['prompt_token_count']}")
+                        if prompt.get('document_token_count') is not None and prompt['document_token_count'] > 0:
+                            st.write(f"**Document Tokens:** {prompt['document_token_count']}")
+                        if prompt.get('total_token_count') is not None:
+                            st.write(f"**Total Tokens:** {prompt['total_token_count']}")
+                        else:
+                            st.write("**Token Count:** Not calculated")
                     
                     st.write(f"**Content:** {prompt['content'][:200]}..." if len(prompt['content']) > 200 else f"**Content:** {prompt['content']}")
         else:

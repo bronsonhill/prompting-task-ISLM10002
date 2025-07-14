@@ -4,6 +4,7 @@ Handles prompt creation and management
 """
 import streamlit as st
 from datetime import datetime
+from typing import List, Dict
 from utils.auth import require_authentication, get_current_user_code
 from utils.database import save_prompt, get_user_prompts, id_to_display_number
 from utils.logging import log_page_visit, log_prompt_creation
@@ -48,6 +49,29 @@ def show_prompt_interface(user_code: str):
             help="This prompt will be used as the system message to initialize conversations with AI."
         )
         
+        # Document upload section
+        st.subheader("📎 Attach Documents (Optional)")
+        st.markdown("Upload documents to provide context for your prompt. These will be included when the prompt is used in chat.")
+        
+        uploaded_files = st.file_uploader(
+            "Choose files",
+            type=['pdf', 'docx', 'txt'],
+            accept_multiple_files=True,
+            help="Supported formats: PDF, DOCX, TXT. Multiple files can be uploaded."
+        )
+        
+        # Show uploaded files preview
+        if uploaded_files:
+            st.write("**Uploaded Documents:**")
+            for i, file in enumerate(uploaded_files):
+                col1, col2, col3 = st.columns([3, 2, 1])
+                with col1:
+                    st.write(f"📄 {file.name}")
+                with col2:
+                    st.write(f"Size: {file.size} bytes")
+                with col3:
+                    st.write(f"Type: {file.type}")
+        
         col1, col2 = st.columns([1, 4])
         
         with col1:
@@ -57,7 +81,19 @@ def show_prompt_interface(user_code: str):
             if not prompt_content.strip():
                 st.error("Please enter prompt content.")
             else:
-                create_new_prompt(user_code, prompt_content.strip())
+                # Process uploaded documents
+                documents = []
+                if uploaded_files:
+                    from utils.database import process_uploaded_document
+                    for file in uploaded_files:
+                        doc_info = process_uploaded_document(file)
+                        if doc_info:
+                            documents.append(doc_info)
+                        else:
+                            st.error(f"Failed to process document: {file.name}")
+                            return
+                
+                create_new_prompt(user_code, prompt_content.strip(), documents)
     
     st.markdown("---")
     
@@ -70,13 +106,27 @@ def show_prompt_interface(user_code: str):
         # st.markdown("---")
         # show_prompt_stats(user_code)
 
-def create_new_prompt(user_code: str, content: str):
+def create_new_prompt(user_code: str, content: str, documents: List[Dict] = []):
     """Create a new prompt"""
     try:
-        prompt_id = save_prompt(user_code, content)
+        prompt_id = save_prompt(user_code, content, documents)
         
         if prompt_id:
             st.success(f"✅ Prompt created successfully! ID: {id_to_display_number(prompt_id)}")
+            
+            # Get the created prompt to show token counts
+            from utils.database import get_prompt_by_id
+            created_prompt = get_prompt_by_id(prompt_id)
+            if created_prompt:
+                if created_prompt.get('prompt_token_count') is not None:
+                    st.info(f"📝 Prompt tokens: {created_prompt['prompt_token_count']}")
+                if created_prompt.get('document_token_count') is not None and created_prompt['document_token_count'] > 0:
+                    st.info(f"📎 Document tokens: {created_prompt['document_token_count']}")
+                if created_prompt.get('total_token_count') is not None:
+                    st.info(f"🔢 Total tokens: {created_prompt['total_token_count']}")
+            
+            if documents:
+                st.success(f"📎 Attached {len(documents)} document(s)")
             log_prompt_creation(user_code, prompt_id, content)
             
             # Clear the form by rerunning
@@ -122,6 +172,14 @@ def show_existing_prompts(user_code: str):
                 
                 if prompt.get('updated_at') and prompt['updated_at'] != prompt['created_at']:
                     st.write(f"**Updated:** {prompt['updated_at'].strftime('%Y-%m-%d %H:%M')}")
+                
+                # Display token counts
+                if prompt.get('prompt_token_count') is not None:
+                    st.write(f"**Prompt Tokens:** {prompt['prompt_token_count']}")
+                if prompt.get('document_token_count') is not None and prompt['document_token_count'] > 0:
+                    st.write(f"**Document Tokens:** {prompt['document_token_count']}")
+                if prompt.get('total_token_count') is not None:
+                    st.write(f"**Total Tokens:** {prompt['total_token_count']}")
             
             with col2:
                 st.write("**Content:**")
@@ -134,6 +192,17 @@ def show_existing_prompts(user_code: str):
                     st.write(f"{content[:200]}...")
                 else:
                     st.write(content)
+                
+                # Show attached documents if any
+                if prompt.get('documents'):
+                    st.write("**📎 Attached Documents:**")
+                    for doc in prompt['documents']:
+                        st.write(f"• {doc['filename']} ({doc['file_type']})")
+                        if len(doc.get('content', '')) > 100:
+                            with st.expander(f"View {doc['filename']} content"):
+                                st.write(doc['content'])
+                        else:
+                            st.write(f"_{doc.get('content', '')[:100]}..._")
             
             with col3:
                 # Action buttons
@@ -175,8 +244,14 @@ def show_prompt_stats(user_code: str):
         st.metric("Used in Conversations", used_prompts)
     
     with col3:
-        avg_length = sum(len(p['content']) for p in prompts) // len(prompts) if prompts else 0
-        st.metric("Avg. Character Length", avg_length)
+        # Calculate average token counts
+        total_prompt_tokens = sum(p.get('prompt_token_count', 0) for p in prompts)
+        total_document_tokens = sum(p.get('document_token_count', 0) for p in prompts)
+        avg_prompt_tokens = total_prompt_tokens // len(prompts) if prompts else 0
+        avg_document_tokens = total_document_tokens // len(prompts) if prompts else 0
+        
+        st.metric("Avg. Prompt Tokens", avg_prompt_tokens)
+        st.metric("Avg. Document Tokens", avg_document_tokens)
     
     # Most used prompts
     if prompt_usage:

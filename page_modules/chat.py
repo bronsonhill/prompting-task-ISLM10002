@@ -105,6 +105,17 @@ def show_conversation_sidebar(user_code: str):
                 st.write(f"**Prompt No.** {id_to_display_number(st.session_state.current_prompt)}")
                 with st.expander("View Prompt"):
                     st.write(prompt_data["content"])
+                    
+                    # Show document information if available
+                    if prompt_data.get('documents'):
+                        st.write("**📎 Attached Documents:**")
+                        for doc in prompt_data['documents']:
+                            st.write(f"• {doc['filename']}")
+                            if len(doc.get('content', '')) > 100:
+                                with st.expander(f"View {doc['filename']}"):
+                                    st.write(doc['content'])
+                            else:
+                                st.write(f"_{doc.get('content', '')}_")
         
         if st.button("🗑️ Clear Chat", use_container_width=True):
             clear_current_chat()
@@ -157,6 +168,17 @@ def show_prompt_selection_modal(user_code: str):
             st.write("**Selected Prompt:**")
             st.info(prompt_data["content"])
             
+            # Show document information if available
+            if prompt_data.get('documents'):
+                st.write("**📎 Attached Documents:**")
+                for doc in prompt_data['documents']:
+                    st.write(f"• {doc['filename']} ({doc['file_type']})")
+                    if len(doc.get('content', '')) > 200:
+                        with st.expander(f"Preview {doc['filename']}"):
+                            st.write(doc['content'][:500] + "..." if len(doc['content']) > 500 else doc['content'])
+                    else:
+                        st.write(f"_{doc.get('content', '')}_")
+            
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Start Chat", use_container_width=True):
@@ -173,10 +195,22 @@ def start_new_conversation(prompt_id: str, user_code: str):
     if not prompt_data:
         st.error("Error loading prompt data.")
         return
+    
+    # Build system message with prompt content and documents
+    system_content = prompt_data["content"]
+    
+    # Add document content if available
+    if prompt_data.get('documents'):
+        system_content += "\n\n**Reference Documents:**\n"
+        for i, doc in enumerate(prompt_data['documents'], 1):
+            system_content += f"\n--- Document {i}: {doc['filename']} ---\n"
+            system_content += doc.get('content', '')
+            system_content += "\n"
+    
     # Initialize conversation with system message
     messages = [{
         "role": "system",
-        "content": prompt_data["content"],
+        "content": system_content,
         "timestamp": datetime.utcnow()
     }]
     
@@ -193,6 +227,8 @@ def start_new_conversation(prompt_id: str, user_code: str):
         
         st.session_state.show_prompt_selector = False
         st.success(f"Started new conversation: {id_to_display_number(conversation_id)}")
+        if prompt_data.get('documents'):
+            st.success(f"📎 Loaded {len(prompt_data['documents'])} document(s) for context")
         st.rerun()
     else:
         st.error("Error creating conversation.")

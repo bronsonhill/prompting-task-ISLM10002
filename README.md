@@ -1,6 +1,6 @@
 # Chat Application MVP
 
-A Streamlit-based chat application with prompt management, conversation tracking, and comprehensive logging for research purposes.
+A Streamlit-based chat application with prompt management, conversation tracking, comprehensive logging for research purposes, and document upload functionality.
 
 ## 🏗️ Architecture Overview
 
@@ -42,6 +42,9 @@ cd v2/
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Note: The application now includes document processing capabilities
+# Additional dependencies: PyPDF2 (for PDF processing), python-docx (for DOCX processing)
 ```
 
 ### 3. Configuration
@@ -108,7 +111,18 @@ streamlit run main.py
   "prompt_id": "P001",       // Auto-incrementing
   "user_code": "ABC12",
   "content": "Your prompt text...",
-  "token_count": 25,         // Number of tokens in the prompt
+  "documents": [             // Array of attached documents
+    {
+      "filename": "document.pdf",
+      "file_type": "application/pdf",
+      "file_size": 1024,
+      "content": "Extracted text content...",
+      "uploaded_at": ISODate
+    }
+  ],
+  "prompt_token_count": 15,      // Number of tokens in prompt text only
+  "document_token_count": 10,    // Number of tokens in documents only
+  "total_token_count": 25,       // Total tokens (prompt + documents)
   "created_at": ISODate,
   "updated_at": ISODate
 }
@@ -173,14 +187,44 @@ streamlit run main.py
 }
 ```
 
+## 📎 Document Upload Feature
+
+The application now supports uploading documents as part of prompt creation. When a prompt with attached documents is used in a chat, the document content is automatically included as context for the AI.
+
+### Supported File Types:
+- **PDF** (.pdf) - Text extraction from PDF documents
+- **DOCX** (.docx) - Microsoft Word documents  
+- **TXT** (.txt) - Plain text files
+
+### How to Use Document Upload:
+
+1. **Create a Prompt**: Go to the "Prompts" page
+2. **Enter Prompt Content**: Write your conversation prompt
+3. **Upload Documents**: Use the file uploader to attach one or more documents
+4. **Create Prompt**: Click "Create Prompt" to save with attached documents
+5. **Use in Chat**: When you start a new chat, select the prompt and the documents will be automatically included as context
+
+### Document Processing:
+- Documents are processed and their text content is extracted
+- Content is stored securely in the database
+- Token counts are tracked separately for prompts and documents
+- Documents are displayed in the prompt interface for review
+
+### Token Count Tracking:
+The system now tracks token counts separately:
+- **Prompt Tokens**: Number of tokens in the prompt text only
+- **Document Tokens**: Number of tokens in attached documents only  
+- **Total Tokens**: Combined total of prompt and document tokens
+- **Migration**: The update script will remove legacy `token_count` fields and replace them with the new separate fields
+
 ## 💬 Usage Guide
 
 ### For Users
 
 1. **Login**: Enter your 5-character access code
 2. **First-time Setup**: Complete data consent form
-3. **Create Prompts**: Go to Prompts page and create conversation starters
-4. **Start Chatting**: Go to Chat page, select a prompt, and start conversing
+3. **Create Prompts**: Go to Prompts page and create conversation starters with optional document attachments
+4. **Start Chatting**: Go to Chat page, select a prompt, and start conversing (documents will be included as context)
 5. **Continue Conversations**: Access your chat history from the sidebar
 
 ### For Administrators
@@ -222,6 +266,12 @@ python scripts/manage_admin_codes.py --init-secure
 # Add new admin codes
 python scripts/manage_admin_codes.py --add YOUR_CODE --level admin
 python scripts/manage_admin_codes.py --add YOUR_CODE --level super_admin
+```
+
+**For Updating Existing Prompts:**
+```bash
+# Update existing prompts with new token count fields
+python scripts/update_prompt_token_counts.py
 ```
 
 ### Managing Admin Codes
