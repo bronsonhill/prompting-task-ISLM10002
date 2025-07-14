@@ -141,26 +141,9 @@ def show_existing_prompts(user_code: str):
                     # Navigate to chat page with this prompt preselected
                     st.session_state.selected_prompt = prompt['prompt_id']
                     st.switch_page("page_modules/chat.py")
-                
-                # Copy button
-                if st.button("📋 Copy Content", key=f"copy_{prompt['prompt_id']}", use_container_width=True):
-                    # Note: Streamlit doesn't have direct clipboard access, so we'll show the content in a text area
-                    show_copy_modal(prompt)
             
             st.markdown("---")
 
-def show_copy_modal(prompt):
-    """Show modal with copyable prompt content"""
-    st.subheader(f"Copy Content - {id_to_display_number(prompt['prompt_id'])}")
-    
-    st.text_area(
-        "Prompt Content (Select all and copy)",
-        value=prompt['content'],
-        height=150,
-        key=f"copy_area_{prompt['prompt_id']}"
-    )
-    
-    st.info("💡 Select all text above and copy (Ctrl+A, then Ctrl+C)")
 
 def show_prompt_stats(user_code: str):
     """Show prompt statistics"""

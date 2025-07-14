@@ -7,10 +7,15 @@ from typing import Dict, Any, Optional
 
 def log_chat_message(user_code: str, prompt_id: str, role: str, content: str) -> bool:
     """Log a chat message"""
+    from .token_counter import count_message_tokens
+    
+    token_count = count_message_tokens(role, content)
+    
     data = {
         "prompt_id": prompt_id,
         "role": role,
         "content": content,
+        "token_count": token_count,
         "message_timestamp": datetime.utcnow().isoformat()
     }
     return log_action(user_code, "chat_message", data)

@@ -108,6 +108,7 @@ streamlit run main.py
   "prompt_id": "P001",       // Auto-incrementing
   "user_code": "ABC12",
   "content": "Your prompt text...",
+  "token_count": 25,         // Number of tokens in the prompt
   "created_at": ISODate,
   "updated_at": ISODate
 }
@@ -121,9 +122,13 @@ streamlit run main.py
   "user_code": "ABC12",
   "prompt_id": "P001",
   "messages": [
-    {"role": "user", "content": "...", "timestamp": ISODate},
-    {"role": "assistant", "content": "...", "timestamp": ISODate}
+    {"role": "user", "content": "...", "timestamp": ISODate, "token_count": 15},
+    {"role": "assistant", "content": "...", "timestamp": ISODate, "token_count": 25}
   ],
+  "token_stats": {
+    "total_input_tokens": 150,
+    "total_output_tokens": 300
+  },
   "created_at": ISODate,
   "updated_at": ISODate
 }
@@ -137,6 +142,20 @@ streamlit run main.py
   "action": "login|prompt_create|chat_message|...",
   "data": {},               // Action-specific data
   "timestamp": ISODate
+}
+```
+
+**Chat Message Logs Include Token Counts:**
+```json
+{
+  "action": "chat_message",
+  "data": {
+    "prompt_id": "P001",
+    "role": "user|assistant",
+    "content": "Message content...",
+    "token_count": 15,
+    "message_timestamp": "2024-01-01T12:00:00"
+  }
 }
 ```
 
@@ -235,6 +254,8 @@ python scripts/manage_admin_codes.py --remove ABC12
 - **User Management**: Search users, view profiles, activity tracking
 - **Conversation Analytics**: Usage patterns, message statistics
 - **Prompt Analytics**: Most used prompts, creation trends
+- **Token Analytics**: Input/output token usage, cost tracking
+- **Logs Analytics**: Comprehensive logging analysis and export
 - **Admin Management**: Add/remove admin codes (Super Admins only)
 
 ### Dynamic Admin Interface
@@ -243,6 +264,7 @@ python scripts/manage_admin_codes.py --remove ABC12
 - Admin users see an additional "Admin" navigation option
 - Admin badge (👑) appears next to username for admin users
 - Admin metrics are shown in user statistics
+- **Five-tab admin dashboard**: Statistics, Users, Prompts, Logs, and Admin Management
 
 ## 🔧 Configuration Options
 
@@ -281,6 +303,26 @@ response = client.chat.completions.create(
 - Prompt creation and usage
 - Login patterns and timestamps  
 - System interactions and errors
+- **Token usage statistics** (input/output tokens for cost tracking)
+
+### Token Tracking
+
+The application tracks token usage for research and cost monitoring purposes:
+
+- **Input Tokens**: Tokens in user messages and system prompts
+- **Output Tokens**: Tokens in AI assistant responses
+- **Prompt Tokens**: Token count for each created prompt
+- **Message-level Tokens**: Individual token counts for each message
+- **Conversation-level Tokens**: Total token statistics per conversation
+
+Token counting uses the `tiktoken` library with GPT-4o encoding (o200k_base) for accurate OpenAI API token estimation.
+
+#### Prompt Token Counts
+- **Automatic Calculation**: Token counts are automatically calculated when prompts are created
+- **Database Storage**: Token counts are stored in the `token_count` field for each prompt
+- **CSV Export**: Prompt token counts are included in all CSV exports
+- **Admin Dashboard**: Token statistics are displayed in the Prompts tab
+- **Update Tool**: Existing prompts without token counts can be updated via admin interface
 
 ### Consent Handling
 

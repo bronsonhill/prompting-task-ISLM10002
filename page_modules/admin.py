@@ -24,6 +24,70 @@ def create_csv_download(data, filename, display_name=None):
             mime="text/csv"
         )
 
+def generate_prompts_csv_data():
+    """Generate prompts CSV data - shared function to eliminate duplication"""
+    try:
+        db = get_database()
+        if db is None:
+            return []
+        
+        # Get all prompts for CSV export
+        all_prompts = list(db.prompts.find({}).sort("created_at", -1))
+        prompts_csv_data = []
+        
+        for prompt in all_prompts:
+            # Adjust timezone for database timestamps
+            created_at_adjusted = prompt['created_at'] + timedelta(hours=11)
+            updated_at_adjusted = prompt['updated_at'] + timedelta(hours=11)
+            
+            # Get total tokens for this prompt across all conversations
+            prompt_token_pipeline = [
+                {"$match": {"prompt_id": prompt['prompt_id']}},
+                {"$group": {
+                    "_id": None,
+                    "total_input_tokens": {"$sum": "$token_stats.total_input_tokens"},
+                    "total_output_tokens": {"$sum": "$token_stats.total_output_tokens"}
+                }}
+            ]
+            prompt_token_result = list(db.conversations.aggregate(prompt_token_pipeline))
+            prompt_total_input_tokens = prompt_token_result[0]["total_input_tokens"] if prompt_token_result else 0
+            prompt_total_output_tokens = prompt_token_result[0]["total_output_tokens"] if prompt_token_result else 0
+            
+            prompts_csv_data.append({
+                "Prompt ID": prompt.get('prompt_id', 'Unknown'),
+                "User Code": prompt['user_code'],
+                "Content": prompt['content'],
+                "Token Count": prompt.get('token_count', 0),
+                "Total Input Tokens": prompt_total_input_tokens,
+                "Total Output Tokens": prompt_total_output_tokens,
+                "Total Tokens": prompt_total_input_tokens + prompt_total_output_tokens,
+                "Created At": created_at_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
+                "Updated At": updated_at_adjusted.strftime('%Y-%m-%d %H:%M:%S')
+            })
+        
+        return prompts_csv_data
+        
+    except Exception as e:
+        st.error(f"Error generating prompts CSV data: {str(e)}")
+        return []
+
+def show_prompt_token_update_section(key_suffix=""):
+    """Show prompt token update section - shared function to eliminate duplication"""
+    st.markdown("---")
+    st.subheader("🔧 Prompt Token Count Update")
+    st.write("If you have existing prompts without token counts, you can update them here.")
+    
+    button_key = f"update_prompts_{key_suffix}" if key_suffix else "update_prompts_shared"
+    
+    if st.button("🔄 Update Existing Prompts with Token Counts", key=button_key):
+        from utils.database import update_prompt_token_counts
+        updated_count = update_prompt_token_counts()
+        if updated_count > 0:
+            st.success(f"✅ Updated {updated_count} prompts with token counts!")
+            st.rerun()
+        else:
+            st.info("ℹ️ All prompts already have token counts.")
+
 def main():
     st.set_page_config(
         page_title="Admin - Chat Application",
@@ -71,7 +135,7 @@ def show_admin_interface():
     user_code = get_current_user_code()
     
     # Create tabs for different admin functions
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Statistics", "👥 Users", " Prompts", "⚙️ Admin Management"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Statistics", "👥 Users", "📝 Prompts", "📋 Logs", "⚙️ Admin Management"])
     
     with tab1:
         show_system_statistics()
@@ -83,6 +147,9 @@ def show_admin_interface():
         show_prompt_statistics()
     
     with tab4:
+        show_logs_analytics()
+    
+    with tab5:
         show_admin_management()
 
 def show_system_statistics():
@@ -108,6 +175,18 @@ def show_system_statistics():
         result = list(db.conversations.aggregate(pipeline))
         total_messages = result[0]["total"] if result else 0
         
+        # Calculate total tokens
+        token_pipeline = [
+            {"$group": {
+                "_id": None,
+                "total_input_tokens": {"$sum": "$token_stats.total_input_tokens"},
+                "total_output_tokens": {"$sum": "$token_stats.total_output_tokens"}
+            }}
+        ]
+        token_result = list(db.conversations.aggregate(token_pipeline))
+        total_input_tokens = token_result[0]["total_input_tokens"] if token_result else 0
+        total_output_tokens = token_result[0]["total_output_tokens"] if token_result else 0
+        
         # Display metrics
         col1, col2, col3, col4 = st.columns(4)
         
@@ -122,6 +201,22 @@ def show_system_statistics():
         
         with col4:
             st.metric("Total Messages", total_messages)
+        
+        # Token metrics
+        st.markdown("---")
+        st.subheader("Token Usage Statistics")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Total Input Tokens", f"{total_input_tokens:,}")
+        
+        with col2:
+            st.metric("Total Output Tokens", f"{total_output_tokens:,}")
+        
+        with col3:
+            total_tokens = total_input_tokens + total_output_tokens
+            st.metric("Total Tokens", f"{total_tokens:,}")
         
         st.markdown("---")
         
@@ -250,6 +345,11 @@ def show_system_statistics():
             created_at_adjusted = conv['created_at'] + timedelta(hours=11)
             updated_at_adjusted = conv['updated_at'] + timedelta(hours=11)
             
+            # Get token statistics
+            token_stats = conv.get('token_stats', {})
+            total_input_tokens = token_stats.get('total_input_tokens', 0)
+            total_output_tokens = token_stats.get('total_output_tokens', 0)
+            
             conversations_csv_data.append({
                 "Conversation ID": conv.get('conversation_id', 'Unknown'),
                 "User Code": conv['user_code'],
@@ -257,13 +357,204 @@ def show_system_statistics():
                 "Created At": created_at_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
                 "Updated At": updated_at_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
                 "Message Count": message_count,
+                "Total Input Tokens": total_input_tokens,
+                "Total Output Tokens": total_output_tokens,
+                "Total Tokens": total_input_tokens + total_output_tokens,
                 "Full Conversation": full_conversation.strip()
             })
         
         create_csv_download(conversations_csv_data, "conversations_data", "💬 Download All Conversations")
         
+        # Use shared function for prompts CSV export
+        prompts_csv_data = generate_prompts_csv_data()
+        create_csv_download(prompts_csv_data, "prompts_data", "📝 Download All Prompts")
+        
+        # Use shared function for prompt token update section
+        show_prompt_token_update_section("stats")
+        
+        # Get logs data for CSV export
+        all_logs = list(db.logs.find({}).sort("timestamp", -1))
+        logs_csv_data = []
+        
+        for log in all_logs:
+            # Adjust timezone for database timestamps
+            timestamp_adjusted = log['timestamp'] + timedelta(hours=11)
+            
+            # Extract data from log
+            data = log.get('data', {})
+            
+            logs_csv_data.append({
+                "Log ID": str(log['_id']),
+                "User Code": log['user_code'],
+                "Action": log['action'],
+                "Timestamp": timestamp_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
+                "Prompt ID": data.get('prompt_id', ''),
+                "Role": data.get('role', ''),
+                "Content": data.get('content', ''),
+                "Token Count": data.get('token_count', 0),
+                "Message Timestamp": data.get('message_timestamp', ''),
+                "Page Name": data.get('page_name', ''),
+                "Conversation ID": data.get('conversation_id', ''),
+                "Error Type": data.get('error_type', ''),
+                "Error Message": data.get('error_message', ''),
+                "Content Length": data.get('content_length', 0),
+                "Full Data": str(data)
+            })
+        
+        create_csv_download(logs_csv_data, "logs_data", "📋 Download All Logs")
+        
     except Exception as e:
         st.error(f"Error loading statistics: {str(e)}")
+
+def show_logs_analytics():
+    """Show logs analytics and management"""
+    st.header("📋 Logs Analytics")
+    
+    try:
+        db = get_database()
+        if db is None:
+            st.error("Database connection failed")
+            return
+        
+        # Get basic log statistics
+        total_logs = db.logs.count_documents({})
+        
+        # Get logs by action type
+        action_pipeline = [
+            {"$group": {
+                "_id": "$action",
+                "count": {"$sum": 1}
+            }},
+            {"$sort": {"count": -1}}
+        ]
+        action_stats = list(db.logs.aggregate(action_pipeline))
+        
+        # Get recent logs
+        recent_logs = list(db.logs.find({}).sort("timestamp", -1).limit(20))
+        
+        # Display metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Total Logs", total_logs)
+        
+        with col2:
+            chat_logs = db.logs.count_documents({"action": "chat_message"})
+            st.metric("Chat Messages", chat_logs)
+        
+        with col3:
+            error_logs = db.logs.count_documents({"action": "error"})
+            st.metric("Errors", error_logs)
+        
+        with col4:
+            login_logs = db.logs.count_documents({"action": "login"})
+            st.metric("Logins", login_logs)
+        
+        # Action type breakdown
+        st.markdown("---")
+        st.subheader("Logs by Action Type")
+        
+        if action_stats:
+            action_data = []
+            for stat in action_stats:
+                action_data.append({
+                    "Action": stat["_id"],
+                    "Count": stat["count"],
+                    "Percentage": f"{(stat['count'] / total_logs * 100):.1f}%"
+                })
+            
+            # Display as a table
+            st.table(action_data)
+        
+        # Recent logs
+        st.markdown("---")
+        st.subheader("Recent Logs")
+        
+        if recent_logs:
+            for log in recent_logs:
+                with st.expander(f"{log['action']} - {log['user_code']} - {log['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.write(f"**Action:** {log['action']}")
+                        st.write(f"**User:** {log['user_code']}")
+                        st.write(f"**Timestamp:** {log['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+                    
+                    with col2:
+                        data = log.get('data', {})
+                        if data:
+                            st.write("**Data:**")
+                            for key, value in data.items():
+                                if key == 'content' and len(str(value)) > 100:
+                                    st.write(f"- {key}: {str(value)[:100]}...")
+                                else:
+                                    st.write(f"- {key}: {value}")
+        
+        # Logs export section
+        st.markdown("---")
+        st.subheader("📊 Logs Export")
+        
+        # Get all logs for CSV export
+        all_logs = list(db.logs.find({}).sort("timestamp", -1))
+        logs_csv_data = []
+        
+        for log in all_logs:
+            # Adjust timezone for database timestamps
+            timestamp_adjusted = log['timestamp'] + timedelta(hours=11)
+            
+            # Extract data from log
+            data = log.get('data', {})
+            
+            logs_csv_data.append({
+                "Log ID": str(log['_id']),
+                "User Code": log['user_code'],
+                "Action": log['action'],
+                "Timestamp": timestamp_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
+                "Prompt ID": data.get('prompt_id', ''),
+                "Role": data.get('role', ''),
+                "Content": data.get('content', ''),
+                "Token Count": data.get('token_count', 0),
+                "Message Timestamp": data.get('message_timestamp', ''),
+                "Page Name": data.get('page_name', ''),
+                "Conversation ID": data.get('conversation_id', ''),
+                "Error Type": data.get('error_type', ''),
+                "Error Message": data.get('error_message', ''),
+                "Content Length": data.get('content_length', 0),
+                "Full Data": str(data)
+            })
+        
+        create_csv_download(logs_csv_data, "logs_data", "📋 Download All Logs")
+        
+        # Token usage from logs
+        st.markdown("---")
+        st.subheader("Token Usage from Logs")
+        
+        # Get total tokens from chat message logs
+        token_pipeline = [
+            {"$match": {"action": "chat_message"}},
+            {"$group": {
+                "_id": None,
+                "total_tokens": {"$sum": "$data.token_count"},
+                "total_messages": {"$sum": 1}
+            }}
+        ]
+        token_result = list(db.logs.aggregate(token_pipeline))
+        
+        if token_result:
+            total_log_tokens = token_result[0]["total_tokens"]
+            total_log_messages = token_result[0]["total_messages"]
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.metric("Total Tokens (from logs)", f"{total_log_tokens:,}")
+            
+            with col2:
+                avg_tokens = total_log_tokens / total_log_messages if total_log_messages > 0 else 0
+                st.metric("Average Tokens per Message", f"{avg_tokens:.1f}")
+        
+    except Exception as e:
+        st.error(f"Error loading logs analytics: {str(e)}")
 
 def show_user_management():
     """Show user management interface"""
@@ -306,8 +597,23 @@ def show_user_management():
                         prompt_count = db.prompts.count_documents({"user_code": user['code']})
                         conv_count = db.conversations.count_documents({"user_code": user['code']})
                         
+                        # Get user's token usage
+                        user_token_pipeline = [
+                            {"$match": {"user_code": user['code']}},
+                            {"$group": {
+                                "_id": None,
+                                "total_input_tokens": {"$sum": "$token_stats.total_input_tokens"},
+                                "total_output_tokens": {"$sum": "$token_stats.total_output_tokens"}
+                            }}
+                        ]
+                        user_token_result = list(db.conversations.aggregate(user_token_pipeline))
+                        user_input_tokens = user_token_result[0]["total_input_tokens"] if user_token_result else 0
+                        user_output_tokens = user_token_result[0]["total_output_tokens"] if user_token_result else 0
+                        
                         st.write(f"**Prompts:** {prompt_count}")
                         st.write(f"**Conversations:** {conv_count}")
+                        st.write(f"**Input Tokens:** {user_input_tokens:,}")
+                        st.write(f"**Output Tokens:** {user_output_tokens:,}")
         else:
             st.info("No users found")
         
@@ -322,13 +628,29 @@ def show_user_management():
             created_at_adjusted = user['created_at'] + timedelta(hours=11)
             last_login_adjusted = user.get('last_login') + timedelta(hours=11) if user.get('last_login') else None
             
+            # Get user's token usage
+            user_token_pipeline = [
+                {"$match": {"user_code": user['code']}},
+                {"$group": {
+                    "_id": None,
+                    "total_input_tokens": {"$sum": "$token_stats.total_input_tokens"},
+                    "total_output_tokens": {"$sum": "$token_stats.total_output_tokens"}
+                }}
+            ]
+            user_token_result = list(db.conversations.aggregate(user_token_pipeline))
+            user_input_tokens = user_token_result[0]["total_input_tokens"] if user_token_result else 0
+            user_output_tokens = user_token_result[0]["total_output_tokens"] if user_token_result else 0
+            
             users_csv_data.append({
                 "User Code": user['code'],
                 "Created At": created_at_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
                 "Last Login": last_login_adjusted.strftime('%Y-%m-%d %H:%M:%S') if last_login_adjusted else 'Never',
                 "Data Consent": "Given" if user.get('data_use_consent') is True else "Denied" if user.get('data_use_consent') is False else "Pending",
                 "Prompts Count": db.prompts.count_documents({"user_code": user['code']}),
-                "Conversations Count": db.conversations.count_documents({"user_code": user['code']})
+                "Conversations Count": db.conversations.count_documents({"user_code": user['code']}),
+                "Total Input Tokens": user_input_tokens,
+                "Total Output Tokens": user_output_tokens,
+                "Total Tokens": user_input_tokens + user_output_tokens
             })
         
         create_csv_download(users_csv_data, "users_data", "👥 Download Users Data")
@@ -362,6 +684,40 @@ def show_prompt_statistics():
         
         with col3:
             st.metric("Private Prompts", private_prompts)
+        
+        # Token statistics for prompts
+        st.markdown("---")
+        st.subheader("Token Statistics")
+        
+        # Calculate total tokens across all prompts
+        token_pipeline = [
+            {"$group": {
+                "_id": None,
+                "total_tokens": {"$sum": "$token_count"},
+                "avg_tokens": {"$avg": "$token_count"},
+                "max_tokens": {"$max": "$token_count"},
+                "min_tokens": {"$min": "$token_count"}
+            }}
+        ]
+        token_stats = list(db.prompts.aggregate(token_pipeline))
+        
+        if token_stats:
+            stats = token_stats[0]
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Total Prompt Tokens", f"{stats.get('total_tokens', 0):,}")
+            
+            with col2:
+                st.metric("Average Tokens per Prompt", f"{stats.get('avg_tokens', 0):.1f}")
+            
+            with col3:
+                st.metric("Max Tokens in Prompt", f"{stats.get('max_tokens', 0):,}")
+            
+            with col4:
+                st.metric("Min Tokens in Prompt", f"{stats.get('min_tokens', 0):,}")
+        else:
+            st.info("No token statistics available. Update prompts with token counts first.")
         
         # Category breakdown
         st.subheader("Prompts by Category")
@@ -398,6 +754,7 @@ def show_prompt_statistics():
                     with col2:
                         st.write(f"**Public:** {'Yes' if prompt.get('is_public', False) else 'No'}")
                         st.write(f"**Updated:** {prompt['updated_at'].strftime('%Y-%m-%d %H:%M')}")
+                        st.write(f"**Token Count:** {prompt.get('token_count', 'Not calculated')}")
                     
                     st.write(f"**Content:** {prompt['content'][:200]}..." if len(prompt['content']) > 200 else f"**Content:** {prompt['content']}")
         else:
@@ -407,24 +764,12 @@ def show_prompt_statistics():
         st.markdown("---")
         st.subheader("📊 Prompt Data Export")
         
-        # Prepare prompt data for CSV export
-        prompts_csv_data = []
-        for prompt in recent_prompts:
-            # Adjust timezone for database timestamps
-            created_at_adjusted = prompt['created_at'] + timedelta(hours=11)
-            updated_at_adjusted = prompt['updated_at'] + timedelta(hours=11)
-            
-            prompts_csv_data.append({
-                "Prompt ID": prompt.get('prompt_id', 'Unknown'),
-                "User Code": prompt['user_code'],
-                "Created At": created_at_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
-                "Updated At": updated_at_adjusted.strftime('%Y-%m-%d %H:%M:%S'),
-                "Category": prompt.get('category', 'General'),
-                "Is Public": 'Yes' if prompt.get('is_public', False) else 'No',
-                "Content Preview": prompt.get('content', 'No content')[:100] + "..." if len(prompt.get('content', '')) > 100 else prompt.get('content', 'No content')
-            })
+        # Use shared function for prompts CSV export
+        prompts_csv_data = generate_prompts_csv_data()
+        create_csv_download(prompts_csv_data, "prompts_data", "📝 Download All Prompts")
         
-        create_csv_download(prompts_csv_data, "prompts_data", "📝 Download Prompts Data")
+        # Use shared function for prompt token update section
+        show_prompt_token_update_section("prompts")
             
     except Exception as e:
         st.error(f"Error loading prompt stats: {str(e)}")

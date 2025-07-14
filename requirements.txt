@@ -3,3 +3,4 @@ openai
 pymongo
 python-dotenv
 pandas
+tiktoken

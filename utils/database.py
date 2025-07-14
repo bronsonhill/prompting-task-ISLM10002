@@ -121,10 +121,15 @@ def save_prompt(user_code: str, content: str) -> Optional[str]:
         else:
             next_id = "P001"
         
+        # Count tokens for the prompt
+        from .token_counter import count_tokens
+        token_count = count_tokens(content)
+        
         prompt_data = {
             "prompt_id": next_id,
             "user_code": user_code,
             "content": content,
+            "token_count": token_count,
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow()
         }
@@ -163,6 +168,38 @@ def get_prompt_by_id(prompt_id: str) -> Optional[Dict]:
         st.error(f"Error getting prompt: {str(e)}")
         return None
 
+def update_prompt_token_counts():
+    """Update all existing prompts with token counts"""
+    try:
+        db = get_database()
+        prompts_collection = db.prompts
+        
+        # Get all prompts that don't have token_count
+        prompts_without_tokens = list(prompts_collection.find({"token_count": {"$exists": False}}))
+        
+        if not prompts_without_tokens:
+            return 0
+        
+        from .token_counter import count_tokens
+        updated_count = 0
+        
+        for prompt in prompts_without_tokens:
+            token_count = count_tokens(prompt['content'])
+            
+            result = prompts_collection.update_one(
+                {"_id": prompt['_id']},
+                {"$set": {"token_count": token_count}}
+            )
+            
+            if result.modified_count > 0:
+                updated_count += 1
+        
+        return updated_count
+        
+    except Exception as e:
+        st.error(f"Error updating prompt token counts: {str(e)}")
+        return 0
+
 def save_conversation(user_code: str, prompt_id: str, messages: List[Dict]) -> Optional[str]:
     """Save a conversation and return its ID"""
     try:
@@ -179,11 +216,26 @@ def save_conversation(user_code: str, prompt_id: str, messages: List[Dict]) -> O
         else:
             next_id = "C001"
         
+        # Calculate token statistics
+        from .token_counter import count_conversation_tokens
+        token_stats = count_conversation_tokens(messages)
+        
+        # Add token counts to each message
+        messages_with_tokens = []
+        for i, message in enumerate(messages):
+            message_with_tokens = message.copy()
+            message_with_tokens["token_count"] = token_stats["message_tokens"][i]["token_count"]
+            messages_with_tokens.append(message_with_tokens)
+        
         conversation_data = {
             "conversation_id": next_id,
             "user_code": user_code,
             "prompt_id": prompt_id,
-            "messages": messages,
+            "messages": messages_with_tokens,
+            "token_stats": {
+                "total_input_tokens": token_stats["total_input_tokens"],
+                "total_output_tokens": token_stats["total_output_tokens"]
+            },
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow()
         }
@@ -203,11 +255,26 @@ def update_conversation(conversation_id: str, messages: List[Dict]) -> bool:
         db = get_database()
         conversations_collection = db.conversations
         
+        # Calculate token statistics
+        from .token_counter import count_conversation_tokens
+        token_stats = count_conversation_tokens(messages)
+        
+        # Add token counts to each message
+        messages_with_tokens = []
+        for i, message in enumerate(messages):
+            message_with_tokens = message.copy()
+            message_with_tokens["token_count"] = token_stats["message_tokens"][i]["token_count"]
+            messages_with_tokens.append(message_with_tokens)
+        
         result = conversations_collection.update_one(
             {"conversation_id": conversation_id},
             {
                 "$set": {
-                    "messages": messages,
+                    "messages": messages_with_tokens,
+                    "token_stats": {
+                        "total_input_tokens": token_stats["total_input_tokens"],
+                        "total_output_tokens": token_stats["total_output_tokens"]
+                    },
                     "updated_at": datetime.utcnow()
                 }
             }
