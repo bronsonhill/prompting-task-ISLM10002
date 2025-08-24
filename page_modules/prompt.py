@@ -116,7 +116,7 @@ def create_new_prompt(user_code: str, content: str, documents: List[Dict] = []):
             
             # Get the created prompt to show token counts
             from utils.database import get_prompt_by_id
-            created_prompt = get_prompt_by_id(prompt_id)
+            created_prompt = get_prompt_by_id(prompt_id, user_code)
             if created_prompt:
                 if created_prompt.get('prompt_token_count') is not None:
                     st.info(f"📝 Prompt tokens: {created_prompt['prompt_token_count']}")

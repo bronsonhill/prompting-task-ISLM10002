@@ -75,6 +75,13 @@ def main():
         load_conversation(conversation_id, user_code)
         del st.session_state.selected_conversation
     
+    # Check if we need to start a new conversation with a selected prompt (from prompt page)
+    if "selected_prompt" in st.session_state:
+        prompt_id = st.session_state.selected_prompt
+        start_new_conversation(prompt_id, user_code)
+        del st.session_state.selected_prompt
+        return
+    
     # Sidebar for conversation management
     with st.sidebar:
         show_conversation_sidebar(user_code)
@@ -100,7 +107,7 @@ def show_conversation_sidebar(user_code: str):
         st.subheader("Current Conversation")
         st.write(f"**Conversation No.** {id_to_display_number(st.session_state.current_conversation)}")
         if st.session_state.current_prompt:
-            prompt_data = get_prompt_by_id(st.session_state.current_prompt)
+            prompt_data = get_prompt_by_id(st.session_state.current_prompt, user_code)
             if prompt_data:
                 st.write(f"**Prompt No.** {id_to_display_number(st.session_state.current_prompt)}")
                 with st.expander("View Prompt"):
@@ -151,7 +158,8 @@ def show_prompt_selection_modal(user_code: str):
     # Create prompt options
     prompt_options = {}
     for prompt in prompts:
-        label = f"{id_to_display_number(prompt['prompt_id'])} - {prompt['content'][:50]}{'...' if len(prompt['content']) > 50 else ''}"
+        display_number = id_to_display_number(prompt['prompt_id'])
+        label = f"{display_number} - {prompt['content'][:50]}{'...' if len(prompt['content']) > 50 else ''}"
         prompt_options[label] = prompt['prompt_id']
     
     selected_prompt_label = st.selectbox(
@@ -162,11 +170,23 @@ def show_prompt_selection_modal(user_code: str):
     
     if selected_prompt_label:
         selected_prompt_id = prompt_options[selected_prompt_label]
-        prompt_data = get_prompt_by_id(selected_prompt_id)
+        
+        # Validate that we have a valid prompt ID
+        if not selected_prompt_id:
+            st.error("Error: Invalid prompt selection. Please try again.")
+            return
+            
+        prompt_data = get_prompt_by_id(selected_prompt_id, user_code)
         
         if prompt_data:
             st.write("**Selected Prompt:**")
             st.info(prompt_data["content"])
+            
+            # Debug information (can be removed in production)
+            with st.expander("Debug Info"):
+                st.write(f"**Prompt ID:** {selected_prompt_id}")
+                st.write(f"**Display Number:** {id_to_display_number(selected_prompt_id)}")
+                st.write(f"**User Code:** {user_code}")
             
             # Show document information if available
             if prompt_data.get('documents'):
@@ -190,10 +210,15 @@ def show_prompt_selection_modal(user_code: str):
 
 def start_new_conversation(prompt_id: str, user_code: str):
     """Start a new conversation with selected prompt"""
+    # Validate prompt_id format
+    if not prompt_id or not isinstance(prompt_id, str):
+        st.error("Error: Invalid prompt ID format.")
+        return
+        
     # Get prompt content
-    prompt_data = get_prompt_by_id(prompt_id)
+    prompt_data = get_prompt_by_id(prompt_id, user_code)
     if not prompt_data:
-        st.error("Error loading prompt data.")
+        st.error(f"Error loading prompt data for ID: {prompt_id}")
         return
     
     # Build system message with prompt content and documents
@@ -236,14 +261,10 @@ def start_new_conversation(prompt_id: str, user_code: str):
 def load_conversation(conversation_id: str, user_code: str):
     """Load an existing conversation"""
     try:
-        conversation = get_conversation_by_id(conversation_id)
+        conversation = get_conversation_by_id(conversation_id, user_code)
         
         if not conversation:
             st.error(f"Conversation {conversation_id} not found.")
-            return False
-            
-        if conversation["user_code"] != user_code:
-            st.error("Access denied to this conversation.")
             return False
             
         # Set session state
@@ -317,10 +338,9 @@ def handle_user_message(user_input: str, user_code: str):
             # Call OpenAI API with streaming
             client = st.session_state.openai_client
             stream = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o",
                 messages=openai_messages,
-                max_tokens=1000,
-                temperature=0.7,
+                max_completion_tokens=1000,
                 stream=True  # Enable streaming
             )
             

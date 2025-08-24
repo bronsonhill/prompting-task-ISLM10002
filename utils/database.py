@@ -167,12 +167,20 @@ def get_user_prompts(user_code: str) -> List[Dict]:
         st.error(f"Error getting user prompts: {str(e)}")
         return []
 
-def get_prompt_by_id(prompt_id: str) -> Optional[Dict]:
-    """Get a specific prompt by ID"""
+def get_prompt_by_id(prompt_id: str, user_code: str = None) -> Optional[Dict]:
+    """Get a specific prompt by ID, optionally filtered by user"""
     try:
         db = get_database()
         prompts_collection = db.prompts
-        return prompts_collection.find_one({"prompt_id": prompt_id})
+        
+        # Build query - always filter by prompt_id
+        query = {"prompt_id": prompt_id}
+        
+        # If user_code is provided, also filter by user ownership
+        if user_code:
+            query["user_code"] = user_code
+            
+        return prompts_collection.find_one(query)
     except Exception as e:
         st.error(f"Error getting prompt: {str(e)}")
         return None
@@ -397,12 +405,20 @@ def get_user_conversations(user_code: str) -> List[Dict]:
         st.error(f"Error getting user conversations: {str(e)}")
         return []
 
-def get_conversation_by_id(conversation_id: str) -> Optional[Dict]:
-    """Get a specific conversation by ID"""
+def get_conversation_by_id(conversation_id: str, user_code: str = None) -> Optional[Dict]:
+    """Get a specific conversation by ID, optionally filtered by user"""
     try:
         db = get_database()
         conversations_collection = db.conversations
-        return conversations_collection.find_one({"conversation_id": conversation_id})
+        
+        # Build query - always filter by conversation_id
+        query = {"conversation_id": conversation_id}
+        
+        # If user_code is provided, also filter by user ownership
+        if user_code:
+            query["user_code"] = user_code
+            
+        return conversations_collection.find_one(query)
     except Exception as e:
         st.error(f"Error getting conversation: {str(e)}")
         return None
