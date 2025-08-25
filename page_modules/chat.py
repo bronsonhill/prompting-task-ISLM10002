@@ -137,11 +137,20 @@ def show_conversation_sidebar(user_code: str):
         for conv in conversations:
             conv_label = f"{id_to_display_number(conv['conversation_id'])}"
             if conv.get('messages'):
-                last_msg = conv['messages'][-1]['content'][:30] + "..." if len(conv['messages'][-1]['content']) > 30 else conv['messages'][-1]['content']
-                conv_label += f" - {last_msg}"
+                # Find the last non-system message for display
+                non_system_messages = [msg for msg in conv['messages'] if msg['role'] != 'system']
+                if non_system_messages:
+                    # Show the last user/assistant message
+                    last_msg = non_system_messages[-1]['content'][:30] + "..." if len(non_system_messages[-1]['content']) > 30 else non_system_messages[-1]['content']
+                    conv_label += f" - {last_msg}"
+                else:
+                    # If only system message exists, show prompt info
+                    system_msg = conv['messages'][0]['content'][:30] + "..." if len(conv['messages'][0]['content']) > 30 else conv['messages'][0]['content']
+                    conv_label += f" - [Prompt: {system_msg}]"
             
             if st.button(conv_label, key=f"conv_{conv['conversation_id']}", use_container_width=True):
-                load_conversation(conv['conversation_id'], user_code)
+                if load_conversation(conv['conversation_id'], user_code):
+                    st.rerun()
     else:
         st.write("No conversations yet. Start a new chat!")
 
@@ -272,6 +281,8 @@ def load_conversation(conversation_id: str, user_code: str):
         st.session_state.current_prompt = conversation["prompt_id"]
         st.session_state.messages = conversation.get("messages", [])
         
+
+        
         log_conversation_continue(user_code, conversation_id)
         return True
         
@@ -293,6 +304,20 @@ def show_chat_interface(user_code: str):
     if not st.session_state.current_conversation:
         st.info("Select 'New Chat' from the sidebar to start a conversation with a prompt.")
         return
+    
+
+    
+    # Check if this is a new conversation with only system message
+    non_system_messages = [msg for msg in st.session_state.messages if msg["role"] != "system"]
+    if not non_system_messages and st.session_state.messages:
+        # Show the prompt information for new conversations
+        system_message = next((msg for msg in st.session_state.messages if msg["role"] == "system"), None)
+        if system_message:
+            st.info("💡 **New Conversation Started**")
+            st.write("**Your selected prompt:**")
+            st.info(system_message["content"])
+            st.write("---")
+            st.write("Type your message below to start chatting!")
     
     # Display chat messages
     for message in st.session_state.messages:
@@ -383,7 +408,7 @@ def handle_user_message(user_input: str, user_code: str):
             log_chat_message(user_code, st.session_state.current_prompt, "assistant", assistant_response)
             
             # Update conversation in database
-            update_conversation(st.session_state.current_conversation, st.session_state.messages)
+            update_conversation(st.session_state.current_conversation, st.session_state.messages, user_code)
             
     except Exception as e:
         st.error(f"Error getting AI response: {str(e)}")

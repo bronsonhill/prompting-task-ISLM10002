@@ -312,8 +312,8 @@ def save_conversation(user_code: str, prompt_id: str, messages: List[Dict]) -> O
         db = get_database()
         conversations_collection = db.conversations
         
-        # Generate next conversation ID for this specific user
-        latest_conversation = conversations_collection.find({"user_code": user_code}).sort("conversation_id", -1).limit(1)
+        # Generate next conversation ID globally (not per user)
+        latest_conversation = conversations_collection.find().sort("conversation_id", -1).limit(1)
         latest_conversation = list(latest_conversation)
         
         if latest_conversation:
@@ -355,7 +355,7 @@ def save_conversation(user_code: str, prompt_id: str, messages: List[Dict]) -> O
         st.error(f"Error saving conversation: {str(e)}")
         return None
 
-def update_conversation(conversation_id: str, messages: List[Dict]) -> bool:
+def update_conversation(conversation_id: str, messages: List[Dict], user_code: str = None) -> bool:
     """Update an existing conversation with new messages"""
     try:
         db = get_database()
@@ -372,8 +372,13 @@ def update_conversation(conversation_id: str, messages: List[Dict]) -> bool:
             message_with_tokens["token_count"] = token_stats["message_tokens"][i]["token_count"]
             messages_with_tokens.append(message_with_tokens)
         
+        # Build query - always filter by conversation_id and user_code if provided
+        query = {"conversation_id": conversation_id}
+        if user_code:
+            query["user_code"] = user_code
+        
         result = conversations_collection.update_one(
-            {"conversation_id": conversation_id},
+            query,
             {
                 "$set": {
                     "messages": messages_with_tokens,
@@ -385,9 +390,11 @@ def update_conversation(conversation_id: str, messages: List[Dict]) -> bool:
                 }
             }
         )
+        
         return result.modified_count > 0
     except Exception as e:
         st.error(f"Error updating conversation: {str(e)}")
+
         return False
 
 def get_user_conversations(user_code: str) -> List[Dict]:
@@ -417,10 +424,12 @@ def get_conversation_by_id(conversation_id: str, user_code: str = None) -> Optio
         # If user_code is provided, also filter by user ownership
         if user_code:
             query["user_code"] = user_code
-            
-        return conversations_collection.find_one(query)
+        
+        result = conversations_collection.find_one(query)
+        return result
     except Exception as e:
         st.error(f"Error getting conversation: {str(e)}")
+
         return None
 
 def log_action(user_code: str, action: str, data: Dict) -> bool:
