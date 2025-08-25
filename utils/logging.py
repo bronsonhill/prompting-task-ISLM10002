@@ -1,13 +1,13 @@
 """
 Logging utilities for the chat application MVP
 """
-from .database import log_action
+from utils.database import log_action
 from datetime import datetime
 from typing import Dict, Any, Optional
 
 def log_chat_message(user_code: str, prompt_id: str, role: str, content: str) -> bool:
     """Log a chat message"""
-    from .token_counter import count_message_tokens
+    from utils.token_counter import count_message_tokens
     
     token_count = count_message_tokens(role, content)
     

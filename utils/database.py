@@ -111,18 +111,22 @@ def save_prompt(user_code: str, content: str, documents: List[Dict] = None) -> O
         db = get_database()
         prompts_collection = db.prompts
         
-        # Generate next prompt ID for this specific user
-        latest_prompt = prompts_collection.find({"user_code": user_code}).sort("prompt_id", -1).limit(1)
-        latest_prompt = list(latest_prompt)
+        # Use atomic operation to get and increment the next prompt ID for this user
+        # This prevents race conditions when multiple prompts are created simultaneously
+        counter_collection = db.counters
         
-        if latest_prompt:
-            latest_id = int(latest_prompt[0]["prompt_id"][1:])  # Remove 'P' prefix
-            next_id = f"P{latest_id + 1:03d}"
-        else:
-            next_id = "P001"
+        # Get the next prompt ID atomically for this specific user
+        result = counter_collection.find_one_and_update(
+            {"_id": f"prompt_id_{user_code}"},
+            {"$inc": {"sequence": 1}},
+            upsert=True,
+            return_document=True
+        )
+        
+        next_id = f"P{result['sequence']:03d}"
         
         # Count tokens for the prompt
-        from .token_counter import count_tokens
+        from utils.token_counter import count_tokens
         prompt_token_count = count_tokens(content)
         
         # Count tokens for documents if provided
@@ -262,7 +266,7 @@ def update_prompt_token_counts():
         if not prompts_to_update:
             return 0
         
-        from .token_counter import count_tokens
+        from utils.token_counter import count_tokens
         updated_count = 0
         
         for prompt in prompts_to_update:
@@ -312,18 +316,22 @@ def save_conversation(user_code: str, prompt_id: str, messages: List[Dict]) -> O
         db = get_database()
         conversations_collection = db.conversations
         
-        # Generate next conversation ID globally (not per user)
-        latest_conversation = conversations_collection.find().sort("conversation_id", -1).limit(1)
-        latest_conversation = list(latest_conversation)
+        # Use atomic operation to get and increment the next conversation ID
+        # This prevents race conditions when multiple conversations are created simultaneously
+        counter_collection = db.counters
         
-        if latest_conversation:
-            latest_id = int(latest_conversation[0]["conversation_id"][1:])  # Remove 'C' prefix
-            next_id = f"C{latest_id + 1:03d}"
-        else:
-            next_id = "C001"
+        # Get the next conversation ID atomically
+        result = counter_collection.find_one_and_update(
+            {"_id": "conversation_id"},
+            {"$inc": {"sequence": 1}},
+            upsert=True,
+            return_document=True
+        )
+        
+        next_id = f"C{result['sequence']:03d}"
         
         # Calculate token statistics
-        from .token_counter import count_conversation_tokens
+        from utils.token_counter import count_conversation_tokens
         token_stats = count_conversation_tokens(messages)
         
         # Add token counts to each message
@@ -362,7 +370,7 @@ def update_conversation(conversation_id: str, messages: List[Dict], user_code: s
         conversations_collection = db.conversations
         
         # Calculate token statistics
-        from .token_counter import count_conversation_tokens
+        from utils.token_counter import count_conversation_tokens
         token_stats = count_conversation_tokens(messages)
         
         # Add token counts to each message

@@ -2,7 +2,7 @@
 Authentication utilities for the chat application MVP
 """
 import streamlit as st
-from .database import (
+from utils.database import (
     get_user_data, create_user, update_last_login, set_data_consent, log_action,
     is_admin_code, get_admin_level, is_super_admin, get_admin_codes, add_admin_code, remove_admin_code
 )

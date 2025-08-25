@@ -78,8 +78,8 @@ def main():
     # Check if we need to start a new conversation with a selected prompt (from prompt page)
     if "selected_prompt" in st.session_state:
         prompt_id = st.session_state.selected_prompt
-        start_new_conversation(prompt_id, user_code)
         del st.session_state.selected_prompt
+        start_new_conversation(prompt_id, user_code)
         return
     
     # Sidebar for conversation management
@@ -263,7 +263,6 @@ def start_new_conversation(prompt_id: str, user_code: str):
         st.success(f"Started new conversation: {id_to_display_number(conversation_id)}")
         if prompt_data.get('documents'):
             st.success(f"📎 Loaded {len(prompt_data['documents'])} document(s) for context")
-        st.rerun()
     else:
         st.error("Error creating conversation.")
 
