@@ -206,7 +206,7 @@ def show_existing_prompts(user_code: str):
             
             with col3:
                 # Action buttons
-                if st.button("💬 Use for Chat", key=f"use_{prompt['prompt_id']}", use_container_width=True):
+                if st.button("💬 Use for Chat", key=f"use_{prompt['prompt_id']}_{i}", use_container_width=True):
                     # Navigate to chat page with this prompt preselected
                     st.session_state.selected_prompt = prompt['prompt_id']
                     st.switch_page("page_modules/chat.py")

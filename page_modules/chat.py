@@ -134,7 +134,15 @@ def show_conversation_sidebar(user_code: str):
     conversations = get_user_conversations(user_code)
     
     if conversations:
+        # Remove potential duplicates based on conversation_id
+        seen_ids = set()
+        unique_conversations = []
         for conv in conversations:
+            if conv['conversation_id'] not in seen_ids:
+                seen_ids.add(conv['conversation_id'])
+                unique_conversations.append(conv)
+        
+        for i, conv in enumerate(unique_conversations):
             conv_label = f"{id_to_display_number(conv['conversation_id'])}"
             if conv.get('messages'):
                 # Find the last non-system message for display
@@ -148,7 +156,8 @@ def show_conversation_sidebar(user_code: str):
                     system_msg = conv['messages'][0]['content'][:30] + "..." if len(conv['messages'][0]['content']) > 30 else conv['messages'][0]['content']
                     conv_label += f" - [Prompt: {system_msg}]"
             
-            if st.button(conv_label, key=f"conv_{conv['conversation_id']}", use_container_width=True):
+            # Use index to ensure unique keys even if conversation_id is duplicated
+            if st.button(conv_label, key=f"conv_{conv['conversation_id']}_{i}", use_container_width=True):
                 if load_conversation(conv['conversation_id'], user_code):
                     st.rerun()
     else:

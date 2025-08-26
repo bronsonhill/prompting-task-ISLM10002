@@ -281,11 +281,19 @@ def show_user_stats():
         # Recent activity
         if conversations:
             st.subheader("Recent Conversations")
+            # Remove potential duplicates based on conversation_id
+            seen_ids = set()
+            unique_conversations = []
             for conv in conversations[:3]:  # Show last 3 conversations
+                if conv['conversation_id'] not in seen_ids:
+                    seen_ids.add(conv['conversation_id'])
+                    unique_conversations.append(conv)
+            
+            for i, conv in enumerate(unique_conversations):
                 with st.expander(f"Conversation {id_to_display_number(conv['conversation_id'])} - {conv['updated_at'].strftime('%Y-%m-%d %H:%M')}"):
                     st.write(f"**Prompt:** {id_to_display_number(conv['prompt_id'])}")
                     st.write(f"**Messages:** {len(conv.get('messages', []))}")
-                    if st.button(f"Continue", key=f"continue_{conv['conversation_id']}"):
+                    if st.button(f"Continue", key=f"continue_{conv['conversation_id']}_{i}"):
                         st.session_state.selected_conversation = conv['conversation_id']
                         st.switch_page("page_modules/chat.py")
                         
