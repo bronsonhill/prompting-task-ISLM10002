@@ -123,9 +123,7 @@ def main():
             st.caption("👑 Super Administrator")
         else:
             st.caption("🔧 Administrator")
-    with col2:
-        if st.button("← Back to Home"):
-            st.switch_page("Home.py")
+
     
     st.markdown("---")
     
