@@ -171,6 +171,68 @@ def get_user_prompts(user_code: str) -> List[Dict]:
         st.error(f"Error getting user prompts: {str(e)}")
         return []
 
+def get_user_prompts_lightweight(user_code: str) -> List[Dict]:
+    """Get prompts without heavy document content for list views"""
+    try:
+        db = get_database()
+        prompts_collection = db.prompts
+        
+        prompts = list(prompts_collection.find(
+            {"user_code": user_code},
+            {
+                "prompt_id": 1,
+                "content": 1,
+                "created_at": 1,
+                "updated_at": 1,
+                "documents.filename": 1,
+                "documents.file_type": 1,
+                "documents.file_size": 1,
+                "documents.uploaded_at": 1,
+                "prompt_token_count": 1,
+                "document_token_count": 1,
+                "total_token_count": 1
+            }
+        ).sort("created_at", -1))
+        
+        return prompts
+    except Exception as e:
+        st.error(f"Error getting user prompts: {str(e)}")
+        return []
+
+def get_prompt_documents(prompt_id: str, user_code: str) -> List[Dict]:
+    """Load document content only when specifically requested"""
+    try:
+        db = get_database()
+        prompts_collection = db.prompts
+        
+        prompt = prompts_collection.find_one(
+            {"prompt_id": prompt_id, "user_code": user_code},
+            {"documents": 1}
+        )
+        
+        return prompt.get("documents", []) if prompt else []
+    except Exception as e:
+        st.error(f"Error getting prompt documents: {str(e)}")
+        return []
+
+def get_prompt_with_documents(prompt_id: str, user_code: str = None) -> Optional[Dict]:
+    """Get a specific prompt with full document content (for chat usage)"""
+    try:
+        db = get_database()
+        prompts_collection = db.prompts
+        
+        # Build query - always filter by prompt_id
+        query = {"prompt_id": prompt_id}
+        
+        # If user_code is provided, also filter by user ownership
+        if user_code:
+            query["user_code"] = user_code
+            
+        return prompts_collection.find_one(query)
+    except Exception as e:
+        st.error(f"Error getting prompt with documents: {str(e)}")
+        return None
+
 def get_prompt_by_id(prompt_id: str, user_code: str = None) -> Optional[Dict]:
     """Get a specific prompt by ID, optionally filtered by user"""
     try:
@@ -418,6 +480,45 @@ def get_user_conversations(user_code: str) -> List[Dict]:
         return conversations
     except Exception as e:
         st.error(f"Error getting user conversations: {str(e)}")
+        return []
+
+def get_user_conversations_lightweight(user_code: str, limit: int = 20) -> List[Dict]:
+    """Get conversations without full message content for list views"""
+    try:
+        db = get_database()
+        conversations_collection = db.conversations
+        
+        conversations = list(conversations_collection.find(
+            {"user_code": user_code},
+            {
+                "conversation_id": 1,
+                "prompt_id": 1,
+                "created_at": 1,
+                "updated_at": 1,
+                "messages": {"$slice": 1},  # Only get first message (system message)
+                "token_stats": 1
+            }
+        ).sort("updated_at", -1).limit(limit))
+        
+        return conversations
+    except Exception as e:
+        st.error(f"Error getting user conversations: {str(e)}")
+        return []
+
+def get_conversation_messages(conversation_id: str, user_code: str) -> List[Dict]:
+    """Load full message content only when specifically requested"""
+    try:
+        db = get_database()
+        conversations_collection = db.conversations
+        
+        conversation = conversations_collection.find_one(
+            {"conversation_id": conversation_id, "user_code": user_code},
+            {"messages": 1}
+        )
+        
+        return conversation.get("messages", []) if conversation else []
+    except Exception as e:
+        st.error(f"Error getting conversation messages: {str(e)}")
         return []
 
 def get_conversation_by_id(conversation_id: str, user_code: str = None) -> Optional[Dict]:

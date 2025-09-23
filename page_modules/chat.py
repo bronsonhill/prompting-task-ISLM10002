@@ -8,8 +8,13 @@ from datetime import datetime
 from utils.auth import require_authentication, get_current_user_code
 from utils.database import (
     get_user_prompts, 
-    get_prompt_by_id, 
+    get_user_prompts_lightweight,
+    get_prompt_by_id,
+    get_prompt_with_documents,
+    get_prompt_documents,
     get_user_conversations,
+    get_user_conversations_lightweight,
+    get_conversation_messages,
     get_conversation_by_id,
     save_conversation,
     update_conversation,
@@ -131,7 +136,9 @@ def show_conversation_sidebar(user_code: str):
     
     # Conversation history
     st.subheader("Chat History")
-    conversations = get_user_conversations(user_code)
+    
+    # Use lightweight loading for conversation list
+    conversations = get_user_conversations_lightweight(user_code, limit=20)
     
     if conversations:
         # Remove potential duplicates based on conversation_id
@@ -144,17 +151,11 @@ def show_conversation_sidebar(user_code: str):
         
         for i, conv in enumerate(unique_conversations):
             conv_label = f"{id_to_display_number(conv['conversation_id'])}"
-            if conv.get('messages'):
-                # Find the last non-system message for display
-                non_system_messages = [msg for msg in conv['messages'] if msg['role'] != 'system']
-                if non_system_messages:
-                    # Show the last user/assistant message
-                    last_msg = non_system_messages[-1]['content'][:30] + "..." if len(non_system_messages[-1]['content']) > 30 else non_system_messages[-1]['content']
-                    conv_label += f" - {last_msg}"
-                else:
-                    # If only system message exists, show prompt info
-                    system_msg = conv['messages'][0]['content'][:30] + "..." if len(conv['messages'][0]['content']) > 30 else conv['messages'][0]['content']
-                    conv_label += f" - [Prompt: {system_msg}]"
+            
+            # For lightweight conversations, we only have the first message (system message)
+            if conv.get('messages') and len(conv['messages']) > 0:
+                system_msg = conv['messages'][0]['content'][:30] + "..." if len(conv['messages'][0]['content']) > 30 else conv['messages'][0]['content']
+                conv_label += f" - [Prompt: {system_msg}]"
             
             # Use index to ensure unique keys even if conversation_id is duplicated
             if st.button(conv_label, key=f"conv_{conv['conversation_id']}_{i}", use_container_width=True):
@@ -165,7 +166,8 @@ def show_conversation_sidebar(user_code: str):
 
 def show_prompt_selection_modal(user_code: str):
     """Show prompt selection interface"""
-    prompts = get_user_prompts(user_code)
+    # Use lightweight loading for prompt list
+    prompts = get_user_prompts_lightweight(user_code)
     
     if not prompts:
         st.error("No prompts found. Please create a prompt first on the Prompts page.")
@@ -194,7 +196,8 @@ def show_prompt_selection_modal(user_code: str):
             st.error("Error: Invalid prompt selection. Please try again.")
             return
             
-        prompt_data = get_prompt_by_id(selected_prompt_id, user_code)
+        # Load full prompt data with documents only when selected
+        prompt_data = get_prompt_with_documents(selected_prompt_id, user_code)
         
         if prompt_data:
             st.write("**Selected Prompt:**")
@@ -233,8 +236,8 @@ def start_new_conversation(prompt_id: str, user_code: str):
         st.error("Error: Invalid prompt ID format.")
         return
         
-    # Get prompt content
-    prompt_data = get_prompt_by_id(prompt_id, user_code)
+    # Get prompt content with documents (only when starting conversation)
+    prompt_data = get_prompt_with_documents(prompt_id, user_code)
     if not prompt_data:
         st.error(f"Error loading prompt data for ID: {prompt_id}")
         return
@@ -278,18 +281,20 @@ def start_new_conversation(prompt_id: str, user_code: str):
 def load_conversation(conversation_id: str, user_code: str):
     """Load an existing conversation"""
     try:
+        # First get basic conversation info
         conversation = get_conversation_by_id(conversation_id, user_code)
         
         if not conversation:
             st.error(f"Conversation {conversation_id} not found.")
             return False
-            
+        
+        # Load full messages only when conversation is selected
+        messages = get_conversation_messages(conversation_id, user_code)
+        
         # Set session state
         st.session_state.current_conversation = conversation_id
         st.session_state.current_prompt = conversation["prompt_id"]
-        st.session_state.messages = conversation.get("messages", [])
-        
-
+        st.session_state.messages = messages
         
         log_conversation_continue(user_code, conversation_id)
         return True

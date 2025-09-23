@@ -237,13 +237,20 @@ def show_consent_form():
 
 def show_user_stats():
     """Display user statistics"""
-    from utils.database import get_user_prompts, get_user_conversations, id_to_display_number
+    from utils.database import (
+        get_user_prompts, 
+        get_user_prompts_lightweight,
+        get_user_conversations, 
+        get_user_conversations_lightweight,
+        id_to_display_number
+    )
     
     user_code = st.session_state.user_code
     
     try:
-        prompts = get_user_prompts(user_code)
-        conversations = get_user_conversations(user_code)
+        # Use lightweight loading for statistics
+        prompts = get_user_prompts_lightweight(user_code)
+        conversations = get_user_conversations_lightweight(user_code, limit=50)
         
         st.subheader("Your Activity")
         

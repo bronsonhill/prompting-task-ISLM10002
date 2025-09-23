@@ -6,7 +6,13 @@ import streamlit as st
 from datetime import datetime
 from typing import List, Dict
 from utils.auth import require_authentication, get_current_user_code
-from utils.database import save_prompt, get_user_prompts, id_to_display_number
+from utils.database import (
+    save_prompt, 
+    get_user_prompts, 
+    get_user_prompts_lightweight,
+    get_prompt_documents,
+    id_to_display_number
+)
 from utils.logging import log_page_visit, log_prompt_creation
 
 def main():
@@ -141,7 +147,8 @@ def show_existing_prompts(user_code: str):
     """Display existing prompts"""
     st.header("Your Prompts")
     
-    prompts = get_user_prompts(user_code)
+    # Use lightweight loading for prompt list
+    prompts = get_user_prompts_lightweight(user_code)
     
     if not prompts:
         st.info("📝 No prompts created yet. Create your first prompt above to start chatting!")
@@ -193,14 +200,24 @@ def show_existing_prompts(user_code: str):
                 else:
                     st.write(content)
                 
-                # Show attached documents if any
+                # Show attached documents if any (with lazy loading)
                 if prompt.get('documents'):
                     st.write("**📎 Attached Documents:**")
                     for doc in prompt['documents']:
                         st.write(f"• {doc['filename']} ({doc['file_type']})")
+                        # Only show content if it's small, otherwise load on demand
                         if len(doc.get('content', '')) > 100:
                             with st.expander(f"View {doc['filename']} content"):
-                                st.write(doc['content'])
+                                # Load full document content on demand
+                                if f"doc_content_{prompt['prompt_id']}_{doc['filename']}" not in st.session_state:
+                                    full_documents = get_prompt_documents(prompt['prompt_id'], user_code)
+                                    for full_doc in full_documents:
+                                        if full_doc['filename'] == doc['filename']:
+                                            st.session_state[f"doc_content_{prompt['prompt_id']}_{doc['filename']}"] = full_doc.get('content', '')
+                                            break
+                                
+                                content = st.session_state.get(f"doc_content_{prompt['prompt_id']}_{doc['filename']}", doc.get('content', ''))
+                                st.write(content)
                         else:
                             st.write(f"_{doc.get('content', '')[:100]}..._")
             
